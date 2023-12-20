@@ -5,6 +5,7 @@ A repo containing AWS resources used to provide feedbacks on GitHub pull request
 # CDK Setup
 
 ```bash
+https://docs.aws.amazon.com/cdk/v2/guide/getting_started.html
 python -m ensurepip --upgrade
 python -m pip install --upgrade pip
 python -m pip install --upgrade virtualenv
@@ -28,4 +29,30 @@ pip install --upgrade -r requirements.txt
 
 # Repeat for each region desired
 cdk bootstrap aws://${AWS_ACCOUNT_NUMBER}/us-east-1
+
+# ensure it synthesises
+cdk synth
 ```
+
+#### Create your Lambda secrets and store them in SSM as plaintext, as secure SSM is not supported in Lambda env vars
+Format is `<environment>/StackName/GITHUB_TOKEN`.
+Examples: 
+- `/dev/PrBot/GITHUB_TOKEN`
+- `/prod/PrBot/GITHUB_TOKEN`
+
+#### Deploy
+Below all stacks will be deployed with no prompts.
+```bash
+AWS_DEFAULT_PROFILE=yam-pxg-sandbox-sre AWS_REGION=us-east-1 cdk deploy --all --require-approval never
+```
+
+
+# Lambda local development
+https://docs.aws.amazon.com/toolkit-for-jetbrains/latest/userguide/invoke-lambda.html
+
+I am using a JetBrains IDE to develop and test the Lambda function locally.  
+As per the above document, template.yaml is used to configure the IDE to run the Lambda function locally.  
+The template.yaml file is also used to deploy the Lambda function to AWS.
+`template.yaml` is stored in the `cdk/lambda` directory.
+
+Values in `template.yaml` should match the stack lambda configured and deployed in the CDK stack.
