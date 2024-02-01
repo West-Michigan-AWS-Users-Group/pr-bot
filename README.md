@@ -1,5 +1,5 @@
 # pr-bot
-A repo containing AWS resources used to provide feedbacks on GitHub pull requests
+A repo containing AWS resources used to provide feedback on GitHub pull requests
 
 
 # CDK Setup
