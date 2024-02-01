@@ -15,7 +15,9 @@ def process_webhook_body(body, token):
     if pull_request is not None:
         pr_url = pull_request.get("url")
         # Add logic to fetch PR details using GitHub API
-        pr_data = requests.get(pr_url, headers={"Authorization": f"token {token}"}).json()
+        pr_data = requests.get(
+            pr_url, headers={"Authorization": f"token {token}"}
+        ).json()
         # Extract relevant information from PR data for LangChain code review
         # This depends highly on the inputs needed by LangChain and Bedrock.
         # Code here is just a placeholder until more clarification on these services is needed.
@@ -30,4 +32,7 @@ def process_pull_request(event, context):
     body = event.get(RESPONSE_BODY_KEY)
     if body is not None:
         process_webhook_body(body, github_token)
-    return {RESPONSE_STATUS_CODE_KEY: 200, RESPONSE_BODY_KEY: json.dumps("Pull request processed")}
+    return {
+        RESPONSE_STATUS_CODE_KEY: 200,
+        RESPONSE_BODY_KEY: json.dumps("Pull request processed"),
+    }

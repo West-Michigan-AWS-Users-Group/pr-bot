@@ -2,10 +2,7 @@
 import os
 
 import aws_cdk as cdk
-from aws_cdk import aws_apigatewayv2 as apigw
-from aws_cdk import aws_apigatewayv2_integrations as apiintegrations
 from aws_cdk import aws_lambda as _lambda
-from aws_cdk import aws_ssm as ssm
 from constructs import Construct
 
 stack_name_short = "PrBot"
@@ -27,40 +24,38 @@ class PrBot(cdk.Stack):
             stack_environment = None
             raise ValueError(f"Invalid environment value declared for stack {id}.")
 
-        github_token = ssm.StringParameter.from_string_parameter_attributes(
-            self,
-            f"{id}githubToken",
-            parameter_name=f"/{stack_environment}/{stack_name_short}/GITHUB_TOKEN",
-            version=1,
-        )
         # Define the Lambda function
         review_pr = _lambda.Function(
             self,
             f"{id}reviewPr",
             code=_lambda.Code.from_asset(
-                "lambda"
+                f"{stack_environment}-lambda",
             ),  # Fetch code from 'lambda' directory
             handler=lambda_handler,  # the function lambda_handler inside review_pr.py
-            runtime=_lambda.Runtime.PYTHON_3_12,  # Change the python version according to your requirement
+            runtime=_lambda.Runtime(
+                "python3.12"
+            ),  # Change the python version according to your requirement
             environment={
-                "GITHUB_TOKEN": github_token.string_value  # environment variable using the SSM Parameter
+                "GITHUB_TOKEN": cdk.SecretValue.secrets_manager(
+                    f"/{stack_environment}/{stack_name_short}/GITHUB_TOKEN",
+                ).unsafe_unwrap(),
             },
         )
 
         # Create the API Gateway with the Lambda integration
-        webhook_api = apigw.HttpApi(
-            self,
-            f"{id}webhookApi",
-            create_default_stage=True,
-            description="Webhook API for processing GitHub webhooks",
-        )
+        # webhook_api = apigw.HttpApi(
+        #     self,
+        #     f"{id}webhookApi",
+        #     create_default_stage=True,
+        #     description="Webhook API for processing GitHub webhooks",
+        # )
 
         # stage
-        webhook_api.add_stage(
-            stage_name="live",
-            auto_deploy=True,
-            description="Live stage",
-        )
+        # webhook_api.add_stage(
+        #     stage_name="live",
+        #     auto_deploy=True,
+        #     description="Live stage",
+        # )
 
         # route
         # webhook_api.add_routes(
@@ -70,8 +65,6 @@ class PrBot(cdk.Stack):
         # )
 
         # integration
-
-
 
         # permission
 
@@ -92,7 +85,7 @@ for environment in deployed_environments:
         # Uncomment the next line if you know exactly what Account and Region you
         # want to deploy the stack to. */
         env=cdk.Environment(
-            account=os.getenv("AWS_ACCOUNT_NUMBER"), region="us-east-1"
+            account=os.getenv("AWS_ACCOUNT_NUMBER"), region="us-west-2"
         ),
         # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
     )
