@@ -5,48 +5,40 @@ on:
       - main
 
 jobs:
-  aws_cdk:
+  build:
     runs-on: ubuntu-latest
     steps:
-
-      - name: Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: Set Stack Name
+      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
+      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
+      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: "16"
+      - name: Install Python dependencies and CDK
         run: |
-          if [ "$GITHUB_REF" == "refs/heads/develop" ]; then
-            STACK_NAME="devPrBot"
-          elif [ "$GITHUB_REF" == "refs/heads/main" ]; then
-            STACK_NAME="prodPrBot"
-          else
-            echo "Skipping workflow for branch $GITHUB_REF"
-            exit 0
-          fi
-          echo "Setting stack name to $STACK_NAME"
-          echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
+          python -m pip install --upgrade pip
+          # install your Python dependencies here
+          npm install -g aws-cdk
 
-      - name: cdk diff
-        if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
-        uses: youyo/aws-cdk-github-actions@v2
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@master
         with:
-          cdk_subcommand: 'diff'
-          actions_comment: false
-          working_dir: 'cdk'
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: 'us-west-2'
-
-      - name: cdk deploy
+          aws-access-key-id: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_SECRET_ACCESS_KEY }}
+          aws-region: "us-west-2"
+      - name: CDK synth
         if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
-        uses: youyo/aws-cdk-github-actions@v2
-        with:
-          cdk_subcommand: 'deploy'
-          cdk_stack: ${{ env.STACK_NAME }}
-          cdk_args: '--require-approval never'
-          working_dir: 'cdk'
-          actions_comment: false
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: 'us-west-2'
+        run: cdk diff --app="python3 ${PWD}/cdk/my_service/app.py" --require-approval=never
+      - name: CDK diff
+        if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
+        run: cdk diff --app="python3 ${PWD}/cdk/my_service/app.py" --require-approval=never
+      - name: CDK deploy
+        if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
+        run: cdk deploy ${{ env.STACK_NAME }} --app="python3 ${PWD}/cdk/app.py" --require-approval=never
