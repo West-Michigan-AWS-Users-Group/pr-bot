@@ -1,0 +1,47 @@
+on:
+  push:
+    branches:
+      - develop
+      - main
+
+jobs:
+  aws_cdk:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Set Stack Name
+        run: |
+          if [ "$GITHUB_REF" == "refs/heads/develop" ]; then
+            STACK_NAME="devPrBot"
+          elif [ "$GITHUB_REF" == "refs/heads/main" ]; then
+            STACK_NAME="prodPrBot"
+          else
+            echo "Skipping workflow for branch $GITHUB_REF"
+            exit 0
+          fi
+          echo "Setting stack name to $STACK_NAME"
+          echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
+
+      - name: cdk diff
+        if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
+        uses: youyo/aws-cdk-github-actions@v2
+        with:
+          cdk_subcommand: 'diff'
+          actions_comment: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: 'us-west-2'
+
+      - name: cdk deploy
+        if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
+        uses: youyo/aws-cdk-github-actions@v2
+        with:
+          cdk_subcommand: 'deploy'
+          cdk_stack: ${{ env.STACK_NAME }}
+          cdk_args: '--require-approval never'
+          actions_comment: false
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: 'us-west-2'

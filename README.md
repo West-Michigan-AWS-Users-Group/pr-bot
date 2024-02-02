@@ -56,3 +56,39 @@ The template.yaml file is also used to deploy the Lambda function to AWS.
 `template.yaml` is stored in the `cdk/lambda` directory.
 
 Values in `template.yaml` should match the stack lambda configured and deployed in the CDK stack.
+
+# CI Deployment
+The CDK stack is deployed using GitHub Actions. It requires access keys to be stored in GitHub secrets to execute
+CDK commands. The account this is deployed into should have the necessary permissions to assume the CDK bootstrap role.
+
+Example user and policy deployed with vanilla CFN that is permitted to assume the CDK bootstrap role:
+```
+    "cdkDeployUser": {
+      "Properties": {
+        "UserName": "sa-cdkDeployUser"
+      },
+      "Type": "AWS::IAM::User"
+    },
+    "cdkDeployPolicyAssignment": {
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "sts:AssumeRole"
+              ],
+              "Effect": "Allow",
+              "Resource": "arn:aws:iam::*:role/cdk-*"
+            }
+          ]
+        },
+        "PolicyName": "production-a-iam-cdk-deploy-user-and-readonly",
+        "Users": [
+          {
+            "Ref": "cdkDeployUser"
+          }
+        ]
+      },
+      "Type": "AWS::IAM::Policy"
+    },
+```
