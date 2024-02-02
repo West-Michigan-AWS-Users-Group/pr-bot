@@ -28,6 +28,7 @@ jobs:
         with:
           cdk_subcommand: 'diff'
           actions_comment: true
+          working_dir: 'cdk'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_SECRET_ACCESS_KEY }}
@@ -40,6 +41,7 @@ jobs:
           cdk_subcommand: 'deploy'
           cdk_stack: ${{ env.STACK_NAME }}
           cdk_args: '--require-approval never'
+          working_dir: 'cdk'
           actions_comment: false
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_ACCESS_KEY_ID }}
