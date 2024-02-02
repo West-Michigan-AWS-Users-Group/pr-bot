@@ -9,6 +9,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
       - name: Set Stack Name
         run: |
           if [ "$GITHUB_REF" == "refs/heads/develop" ]; then
