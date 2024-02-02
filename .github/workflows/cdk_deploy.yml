@@ -30,7 +30,7 @@ jobs:
         uses: youyo/aws-cdk-github-actions@v2
         with:
           cdk_subcommand: 'diff'
-          actions_comment: true
+          actions_comment: false
           working_dir: 'cdk'
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_ACCESS_KEY_ID }}
