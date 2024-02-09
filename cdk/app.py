@@ -14,13 +14,10 @@ class PrBot(cdk.Stack):
         super().__init__(scope, id, **kwargs)
 
         if 'dev' in id:
-            lambda_handler = 'dev_review_pr.handler'
             stack_environment = 'dev'
         elif 'prod' in id:
-            lambda_handler = 'prod_review_pr.handler'
             stack_environment = 'prod'
         else:
-            lambda_handler = None
             stack_environment = None
             raise ValueError(f'Invalid environment value declared for stack {id}.')
 
@@ -31,7 +28,7 @@ class PrBot(cdk.Stack):
             code=aws_lambda.Code.from_asset(
                 f'{stack_environment}-lambda',
             ),
-            handler=lambda_handler,
+            handler='handler',
             runtime=aws_lambda.Runtime(
                 'python3.12'
             ),  # Change the python version according to your requirement
