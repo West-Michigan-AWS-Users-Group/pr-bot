@@ -1,5 +1,5 @@
 aws-cdk-lib>=2.126.0
-constructs>=10.2.70
-aws-cdk-core>=1.33.1
+constructs>=11.0.0
+aws-cdk-core>=1.204.0
 requests
 pytest
