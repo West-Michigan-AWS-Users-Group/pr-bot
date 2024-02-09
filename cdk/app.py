@@ -2,77 +2,75 @@
 import os
 
 import aws_cdk as cdk
-from aws_cdk import aws_lambda as _lambda
+from aws_cdk import aws_apigatewayv2, aws_apigatewayv2_integrations, aws_lambda
 from constructs import Construct
 
-stack_name_short = "PrBot"
-deployed_environments = ["dev", "prod"]
+stack_name_short = 'PrBot'
+deployed_environments = ['dev', 'prod']
 
 
 class PrBot(cdk.Stack):
     def __init__(self, scope: Construct, id: str, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
-        if "dev" in id:
-            lambda_handler = "dev_review_pr.lambda_handler"
-            stack_environment = "dev"
-        elif "prod" in id:
-            lambda_handler = "prod_review_pr.lambda_handler"
-            stack_environment = "prod"
+        if 'dev' in id:
+            lambda_handler = 'dev_review_pr.lambda_handler'
+            stack_environment = 'dev'
+        elif 'prod' in id:
+            lambda_handler = 'prod_review_pr.lambda_handler'
+            stack_environment = 'prod'
         else:
             lambda_handler = None
             stack_environment = None
-            raise ValueError(f"Invalid environment value declared for stack {id}.")
+            raise ValueError(f'Invalid environment value declared for stack {id}.')
 
         # Define the Lambda function
-        review_pr = _lambda.Function(
+        review_pr = aws_lambda.Function(
             self,
-            f"{id}reviewPr",
-            code=_lambda.Code.from_asset(
-                f"{stack_environment}-lambda",
-            ),  # Fetch code from 'lambda' directory
-            handler=lambda_handler,  # the function lambda_handler inside review_pr.py
-            runtime=_lambda.Runtime(
-                "python3.12"
+            f'{id}reviewPr',
+            code=aws_lambda.Code.from_asset(
+                f'{stack_environment}-lambda',
+            ),
+            handler=lambda_handler,
+            runtime=aws_lambda.Runtime(
+                'python3.12'
             ),  # Change the python version according to your requirement
             environment={
-                "GITHUB_TOKEN": cdk.SecretValue.secrets_manager(
-                    f"/{stack_environment}/{stack_name_short}/GITHUB_TOKEN",
+                'GITHUB_TOKEN': cdk.SecretValue.secrets_manager(
+                    f'/{stack_environment}/{stack_name_short}/GITHUB_TOKEN',
                 ).unsafe_unwrap(),
             },
         )
 
-        # Create the API Gateway with the Lambda integration
-        # webhook_api = apigw.HttpApi(
-        #     self,
-        #     f"{id}webhookApi",
-        #     create_default_stage=True,
-        #     description="Webhook API for processing GitHub webhooks",
-        # )
+        webhook_api = aws_apigatewayv2.HttpApi(
+            self,
+            f'{id}webhookApi',
+            create_default_stage=True,
+            description='Webhook API for PR review'
+        )
 
-        # stage
-        # webhook_api.add_stage(
-        #     stage_name="live",
-        #     auto_deploy=True,
-        #     description="Live stage",
-        # )
+        webhook_api.add_stage(
+            f'{id}webhookApiStage',
+            stage_name='live',
+            auto_deploy=True,
+        )
 
-        # route
-        # webhook_api.add_routes(
-        #     path="/review-pr",
-        #     methods=[apigw.HttpMethod.POST],
-        #     integration=apiintegrations.LambdaProxyIntegration(
-        # )
+        pr_review_integration = aws_apigatewayv2_integrations.HttpLambdaIntegration(
+            f'{id}webhookApiPrReviewIntegration',
+            review_pr
+        )
 
-        # integration
-
-        # permission
+        webhook_api.add_routes(
+            path='/pr-review',
+            methods=[aws_apigatewayv2.HttpMethod.POST],
+            integration=pr_review_integration
+        )
 
 
 app = cdk.App()
 
 for environment in deployed_environments:
-    stack_name_l = f"{environment}{stack_name_short}"
+    stack_name_l = f'{environment}{stack_name_short}'
     PrBot(
         app,
         stack_name_l,
@@ -85,7 +83,7 @@ for environment in deployed_environments:
         # Uncomment the next line if you know exactly what Account and Region you
         # want to deploy the stack to. */
         env=cdk.Environment(
-            account=os.getenv("AWS_ACCOUNT_NUMBER"), region="us-west-2"
+            account=os.getenv('AWS_ACCOUNT_NUMBER'), region='us-west-2'
         ),
         # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
     )
