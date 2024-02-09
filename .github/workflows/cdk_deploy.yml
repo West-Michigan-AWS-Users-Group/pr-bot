@@ -48,10 +48,10 @@ jobs:
           echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
       - name: CDK synth
         if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
-        run: cd cdk && cdk synth --require-approval=never
+        run: cd cdk && cdk synth ${{ env.STACK_NAME }} --require-approval=never
       - name: CDK diff
         if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
-        run: cdk diff --app="python3 ${PWD}/cdk/app.py" --require-approval=never
+        run: cd cdk && cdk diff ${{ env.STACK_NAME }} --require-approval=never
       - name: CDK deploy
         if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
-        run: cdk deploy ${{ env.STACK_NAME }} --app="python3 ${PWD}/cdk/app.py" --require-approval=never
+        run: cd cdk && cdk deploy ${{ env.STACK_NAME }} --require-approval=never
