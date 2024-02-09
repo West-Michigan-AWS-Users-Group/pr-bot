@@ -48,7 +48,7 @@ jobs:
           echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
       - name: CDK synth
         if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
-        run: cdk synth --app="python3 ${PWD}/cdk/app.py" --require-approval=never
+        run: cd cdk && cdk synth --app="python3 ${PWD}/cdk/app.py" --require-approval=never
       - name: CDK diff
         if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
         run: cdk diff --app="python3 ${PWD}/cdk/app.py" --require-approval=never
