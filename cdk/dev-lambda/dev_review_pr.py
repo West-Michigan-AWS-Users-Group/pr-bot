@@ -36,3 +36,10 @@ def process_pull_request(event, context):
         RESPONSE_STATUS_CODE_KEY: 200,
         RESPONSE_BODY_KEY: json.dumps("Pull request processed"),
     }
+
+def handler(event, context):
+    process_pull_request(event, context)
+    return {
+        'statusCode': 200,
+        'body': json.dumps('Hello from Lambda!')
+    }
