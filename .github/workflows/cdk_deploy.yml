@@ -25,7 +25,7 @@ jobs:
         run: |
           # install your Python dependencies here
           npm install -g aws-cdk
-          python -m pip install --upgrade pip
+          python -m pip install --use-feature=fast-deps
           pip install -r cdk/requirements.txt
 
       - name: Configure AWS credentials
