@@ -92,3 +92,10 @@ Example user and policy deployed with vanilla CFN that is permitted to assume th
       "Type": "AWS::IAM::Policy"
     },
 ```
+
+Testing the URL:
+
+```bash
+curl -X POST -d '{"foo": "bar"}' -H 'Content-Type: application/json' https://<placeholder>.execute-api.us-west-2.amazonaws.com/live/pr-review
+
+```
