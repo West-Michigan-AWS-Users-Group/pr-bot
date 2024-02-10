@@ -71,7 +71,7 @@ app = cdk.App()
 
 for environment in deployed_environments:
     stack_name_l = f'{environment}{stack_name_short}'
-    PrBot(
+    prbot_stack = PrBot(
         app,
         stack_name_l,
         # If you don't specify 'env', this stack will be environment-agnostic.
@@ -87,5 +87,10 @@ for environment in deployed_environments:
         ),
         # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
     )
+    cdk.Tags.of(prbot_stack).add('environment', environment)
+    cdk.Tags.of(prbot_stack).add('stack', stack_name_l)
+    cdk.Tags.of(prbot_stack).add('service', 'pr-bot')
+    cdk.Tags.of(prbot_stack).add('user', 'tnielsen')
+    cdk.Tags.of(prbot_stack).add('deployment_method', 'CDK')
 
 app.synth()
