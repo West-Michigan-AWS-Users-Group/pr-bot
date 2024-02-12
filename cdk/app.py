@@ -16,18 +16,24 @@ from constructs import Construct
 
 stack_name_short = "PrBot"
 deployed_environments = ["dev", "prod"]
+lambda_pip_deps = ["langchain", "PyGithub"]
 
 
-def install_and_create_lambda_layer(module_name):
-    # Create a temporary directory to store the layer files
+def install_and_create_lambda_layer(modules: list[str]) -> str:
+    """
+    Install the specified Python modules and create a Lambda layer package.
+    :param modules: List of Python modules to install
+    :return: Path to the created Lambda layer package
+    """
     temp_dir = "temp_layer"
     os.makedirs(temp_dir, exist_ok=True)
 
     try:
-        subprocess.run(["pip", "install", module_name, "-t", temp_dir])
-        # Create a zip file for the Lambda layer
-        zip_file_name = f"{module_name}_layer.zip"
+        zip_file_name = f"{stack_name_short}_layer.zip"
         zip_file_path = os.path.join(os.getcwd(), zip_file_name)
+        for module in modules:
+            # Install the module in the temporary directory
+            subprocess.run(["pip", "install", module, "-t", temp_dir])
         with zipfile.ZipFile(zip_file_path, "w") as zipf:
             # Add all files from the temporary directory to the zip file
             for root, dirs, files in os.walk(temp_dir):
@@ -40,7 +46,6 @@ def install_and_create_lambda_layer(module_name):
         return zip_file_path
     except Exception as e:
         print(f"Error creating Lambda layer package: {e}")
-        return None
 
     finally:
         # Clean up: remove the temporary directory
@@ -62,7 +67,7 @@ class PrBot(cdk.Stack):
             stack_environment = None
             raise ValueError(f"Invalid environment value declared for stack {id}.")
 
-        layer_filename = install_and_create_lambda_layer("langchain")
+        layer_filename = install_and_create_lambda_layer(lambda_pip_deps)
 
         pypi_layer = aws_lambda.LayerVersion(
             self,
