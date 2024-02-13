@@ -16,7 +16,7 @@ from constructs import Construct
 
 stack_name_short = "PrBot"
 deployed_environments = ["dev", "prod"]
-lambda_pip_deps = ["langchain", "PyGithub"]
+lambda_pip_deps = ["langchain", "PyGithub", "Cryptography"]
 
 
 def install_and_create_lambda_layer(modules: list[str]) -> str:
