@@ -16,7 +16,13 @@ github_token = env_var_dict.get("GITHUB_TOKEN")
 
 def authenticate_github(auth_token: str) -> Github:
     auth = Auth.Token(auth_token)
-    g = Github(auth=auth)
+    logger.info("auth: %s", auth)
+    try:
+        g = Github(auth=auth)
+    except Exception as e:
+        message = f"Error authenticating with Github: {e}"
+        logger.error(message)
+        raise Exception(message)
     return g
 
 
