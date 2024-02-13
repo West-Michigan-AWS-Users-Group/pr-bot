@@ -76,14 +76,14 @@ class PrBot(Stack):
             raise ValueError(f"Invalid environment value declared for stack {id}.")
 
         try:
-            result = subprocess.run(["/bin/bash", "./create-layer.sh", stack_environment], check=True, text=True,
+            result = subprocess.run(["/bin/bash", "./create-layer-docker.sh"], check=True, text=True,
                                     capture_output=True)
             print("Script output:", result.stdout)
         except subprocess.CalledProcessError as e:
             print("Error executing script:", e)
             print("Script output (if any):", e.output)
 
-        layer_path = f"{stack_environment}-lambda/layer.zip"
+        layer_path = "requests-layer.zip"
 
         pypi_layer = aws_lambda.LayerVersion(
             self,
