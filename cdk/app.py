@@ -83,7 +83,7 @@ class PrBot(Stack):
             print("Error executing script:", e)
             print("Script output (if any):", e.output)
 
-        layer_path = "requests-layer.zip"
+        layer_path = "layers/prbot-layer.zip"
 
         pypi_layer = aws_lambda.LayerVersion(
             self,

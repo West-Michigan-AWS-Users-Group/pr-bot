@@ -18,4 +18,4 @@ RUN pip install --platform manylinux2014_x86_64 --only-binary=:all: -r requireme
 # Set the CMD to zip the installed packages into a layer
 # change the `requests-layer` to the LAYER_NAME variable as per create_layer.sh file
 
-CMD cd /opt && zip -r9 /app/requests-layer.zip .
+CMD cd /opt && zip -r9 /app/prbot-layer.zip .
