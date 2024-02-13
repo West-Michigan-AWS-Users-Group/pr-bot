@@ -29,24 +29,23 @@ def install_and_create_lambda_layer(modules: list[str]) -> str:
     os.makedirs(temp_dir, exist_ok=True)
 
     try:
+        layer_dir = os.path.join(temp_dir, "python/lib/python3.11/site-packages/")
+        os.makedirs(layer_dir, exist_ok=True)
+
+        for module in modules:
+            # Install the module in the layer directory
+            subprocess.run(["pip", "install", module, "-t", layer_dir])
+
         zip_file_name = f"{stack_name_short}_layer.zip"
         zip_file_path = os.path.join(os.getcwd(), zip_file_name)
-        for module in modules:
-            # Install the module in the temporary directory
-            subprocess.run(["pip", "install", module, "-t", temp_dir])
-        with zipfile.ZipFile(zip_file_path, "w") as zipf:
-            # Add all files from the temporary directory to the zip file
-            for root, dirs, files in os.walk(temp_dir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    arcname = os.path.relpath(file_path, temp_dir)
-                    zipf.write(file_path, arcname)
+
+        # Use shutil.make_archive to create the ZIP file
+        shutil.make_archive(zip_file_path[:-4], 'zip', temp_dir)
 
         print(f"Lambda layer package '{zip_file_name}' created successfully.")
         return zip_file_path
     except Exception as e:
         print(f"Error creating Lambda layer package: {e}")
-
     finally:
         # Clean up: remove the temporary directory
         shutil.rmtree(temp_dir, ignore_errors=True)
