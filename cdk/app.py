@@ -20,7 +20,7 @@ layer_path = "layers/prbot-layer.zip"
 deployed_environments = ["dev", "prod"]
 
 
-def create_layer_zip() -> str:
+def create_layer_zip():
     """
     Create a zip file of the layer using the create-layer-docker.sh script.
     Saves a zip file to the layers directory.
