@@ -11,53 +11,33 @@ from aws_cdk import (
     SecretValue,
     Tags,
     Environment,
-    App
+    App,
 )
 from constructs import Construct
 
 stack_name_short = "PrBot"
+layer_path = "layers/prbot-layer.zip"
 deployed_environments = ["dev", "prod"]
-# lambda_pip_deps = ["PyGithub"]
-#
-#
-# def install_and_create_lambda_layer(modules: list[str]) -> str:
-#     """
-#     Install the specified Python modules and create a Lambda layer package.
-#     :param modules: List of Python modules to install
-#     :return: Path to the created Lambda layer package
-#     """
-#     temp_dir = "temp_layer"
-#     os.makedirs(temp_dir, exist_ok=True)
-#
-#     try:
-#         layer_dir = os.path.join(temp_dir, "python/lib/python3.11/site-packages/")
-#         os.makedirs(layer_dir, exist_ok=True)
-#
-#         for module in modules:
-#             # Install the module in the layer directory
-#             subprocess.run(
-#                 [
-#                     "pip",
-#                     "install",
-#                     module,
-#                     "-t",
-#                     layer_dir,
-#                 ]
-#             )
-#
-#         zip_file_name = f"{stack_name_short}_layer.zip"
-#         zip_file_path = os.path.join(os.getcwd(), zip_file_name)
-#
-#         # Use shutil.make_archive to create the ZIP file
-#         shutil.make_archive(zip_file_path[:-4], "zip", temp_dir)
-#
-#         print(f"Lambda layer package '{zip_file_name}' created successfully.")
-#         return zip_file_path
-#     except Exception as e:
-#         print(f"Error creating Lambda layer package: {e}")
-#     finally:
-#         # Clean up: remove the temporary directory
-#         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def create_layer_zip() -> str:
+    """
+    Create a zip file of the layer using the create-layer-docker.sh script.
+    Saves a zip file to the layers directory.
+    returns the path to the zip file.
+    :return:
+    """
+    try:
+        result = subprocess.run(
+            ["/bin/bash", "./create-layer-docker.sh"],
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+        print("Script output:", result.stdout)
+    except subprocess.CalledProcessError as e:
+        print("Error executing script:", e)
+        print("Script output (if any):", e.output)
 
 
 class PrBot(Stack):
@@ -74,16 +54,6 @@ class PrBot(Stack):
             lambda_handler = None
             stack_environment = None
             raise ValueError(f"Invalid environment value declared for stack {id}.")
-
-        try:
-            result = subprocess.run(["/bin/bash", "./create-layer-docker.sh"], check=True, text=True,
-                                    capture_output=True)
-            print("Script output:", result.stdout)
-        except subprocess.CalledProcessError as e:
-            print("Error executing script:", e)
-            print("Script output (if any):", e.output)
-
-        layer_path = "layers/prbot-layer.zip"
 
         pypi_layer = aws_lambda.LayerVersion(
             self,
@@ -140,6 +110,7 @@ app = App()
 
 for environment in deployed_environments:
     stack_name_l = f"{environment}{stack_name_short}"
+    create_layer_zip()
     prbot_stack = PrBot(
         app,
         stack_name_l,
@@ -151,9 +122,7 @@ for environment in deployed_environments:
         # env=cdk.Environment(account=os.getenv('CDK_DEFAULT_ACCOUNT'), region=os.getenv('CDK_DEFAULT_REGION')),
         # Uncomment the next line if you know exactly what Account and Region you
         # want to deploy the stack to. */
-        env=Environment(
-            account=os.getenv("AWS_ACCOUNT_NUMBER"), region="us-west-2"
-        ),
+        env=Environment(account=os.getenv("AWS_ACCOUNT_NUMBER"), region="us-west-2"),
         # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
     )
     Tags.of(prbot_stack).add("environment", environment)

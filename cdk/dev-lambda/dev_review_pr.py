@@ -7,7 +7,7 @@ from github import Auth, Github, PullRequest
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-request_id = os.environ['AWS_REQUEST_ID']
+request_id = os.environ["AWS_REQUEST_ID"]
 
 # Get environment variable
 env_var_value = os.environ.get("GITHUB_TOKEN")
@@ -79,11 +79,14 @@ def handler(event, context):
             repo = g_session.get_repo(repo_name)
             pr = repo.get_pull(pr_number)
             logger.info("pr: %s", pr)
-            post_comment_to_pr(pr, f"""Test comment from pr-bot development environment. 
+            post_comment_to_pr(
+                pr,
+                f"""Test comment from pr-bot development environment. 
 PR Number: {pr_number}
 Lambda RequestID: {request_id}
 _this is an auto-generated comment_
-""")
+""",
+            )
         except Exception as e:
             message = f"Error posting comment to pr: {e}"
             logger.error(message)
