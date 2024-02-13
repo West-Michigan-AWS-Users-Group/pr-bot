@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 import os
 import shutil
-import zipfile
 import subprocess
 
 import aws_cdk as cdk
