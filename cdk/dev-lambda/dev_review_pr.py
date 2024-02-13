@@ -15,10 +15,11 @@ github_token = env_var_dict.get("GITHUB_TOKEN")
 
 
 def authenticate_github(auth_token: str) -> Github:
+    logger.info("attempting to authenticate: %s")
     auth = Auth.Token(auth_token)
-    logger.info("auth: %s", auth)
     try:
         g = Github(auth=auth)
+        logger.info("authenticated successfully")
     except Exception as e:
         message = f"Error authenticating with Github: {e}"
         logger.error(message)
@@ -62,7 +63,7 @@ def handler(event, context):
             logger.error(message)
             return {"statusCode": 500, "body": message}
 
-        # fetch diff url
+        # fetch diff url contents
         try:
             diff = get_diff_from_pr(pr_diff_url)
             logger.info("diff: %s", diff)
@@ -74,7 +75,9 @@ def handler(event, context):
         # auth with github and post comment to pr
         try:
             g_session = authenticate_github(github_token)
-            pr = g_session.get_pull(pr_number)
+            repo = g_session.get_repo(repo_name)
+            pr = repo.get_pull(pr_number)
+            logger.info("pr: %s", pr)
             post_comment_to_pr(pr, "Test comment from pr-bot development environment")
         except Exception as e:
             message = f"Error posting comment to pr: {e}"
