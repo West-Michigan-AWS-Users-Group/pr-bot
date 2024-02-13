@@ -13,5 +13,6 @@ cdk.out
 .idea/
 **/.idea/*
 
-# layer files
+# layer related files
 PrBot_layer.zip
+/python*
