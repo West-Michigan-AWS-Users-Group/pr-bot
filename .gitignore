@@ -157,3 +157,6 @@ cython_debug/
 
 # environment files
 *.env
+
+# Mac
+.DS_Store
