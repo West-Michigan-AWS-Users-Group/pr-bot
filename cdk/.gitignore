@@ -10,5 +10,7 @@ __pycache__
 cdk.out
 
 # Jetbrains files
-.idea
+.idea/
 **/.idea/*
+
+PrBot_layer.zip

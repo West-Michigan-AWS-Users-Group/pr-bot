@@ -4,13 +4,15 @@ import shutil
 import zipfile
 import subprocess
 
-import aws_cdk as cdk
 from aws_cdk import (
     aws_apigatewayv2,
     aws_apigatewayv2_integrations,
     aws_lambda,
-    aws_s3,
-    Duration,
+    Stack,
+    SecretValue,
+    Tags,
+    Environment,
+    App
 )
 from constructs import Construct
 
@@ -52,7 +54,7 @@ def install_and_create_lambda_layer(modules: list[str]) -> str:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-class PrBot(cdk.Stack):
+class PrBot(Stack):
     def __init__(self, scope: Construct, id: str, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
@@ -87,7 +89,7 @@ class PrBot(cdk.Stack):
                 f"{stack_environment}-lambda",
             ),
             environment={
-                "GITHUB_TOKEN": cdk.SecretValue.secrets_manager(
+                "GITHUB_TOKEN": SecretValue.secrets_manager(
                     f"/{stack_environment}/{stack_name_short}/GITHUB_TOKEN",
                 ).unsafe_unwrap(),
             },
@@ -120,7 +122,7 @@ class PrBot(cdk.Stack):
         )
 
 
-app = cdk.App()
+app = App()
 
 for environment in deployed_environments:
     stack_name_l = f"{environment}{stack_name_short}"
@@ -135,15 +137,15 @@ for environment in deployed_environments:
         # env=cdk.Environment(account=os.getenv('CDK_DEFAULT_ACCOUNT'), region=os.getenv('CDK_DEFAULT_REGION')),
         # Uncomment the next line if you know exactly what Account and Region you
         # want to deploy the stack to. */
-        env=cdk.Environment(
+        env=Environment(
             account=os.getenv("AWS_ACCOUNT_NUMBER"), region="us-west-2"
         ),
         # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
     )
-    cdk.Tags.of(prbot_stack).add("environment", environment)
-    cdk.Tags.of(prbot_stack).add("stack", stack_name_l)
-    cdk.Tags.of(prbot_stack).add("service", "pr-bot")
-    cdk.Tags.of(prbot_stack).add("user", "tnielsen")
-    cdk.Tags.of(prbot_stack).add("deployment_method", "CDK")
+    Tags.of(prbot_stack).add("environment", environment)
+    Tags.of(prbot_stack).add("stack", stack_name_l)
+    Tags.of(prbot_stack).add("service", "pr-bot")
+    Tags.of(prbot_stack).add("user", "tnielsen")
+    Tags.of(prbot_stack).add("deployment_method", "CDK")
 
 app.synth()
