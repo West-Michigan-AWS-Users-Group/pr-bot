@@ -37,8 +37,6 @@ def install_and_create_lambda_layer(modules: list[str]) -> str:
                 [
                     "pip",
                     "install",
-                    "--platform=manylinux1_x86_64",
-                    "--only-binary=:all:",
                     module,
                     "-t",
                     layer_dir,
