@@ -76,7 +76,7 @@ def handler(event, context):
             return {"statusCode": 500, "body": message}
 
         logger.info("Comment posted to PR successfully.")
-        return {"statusCode": 200, "body": 'Comment posted to PR successfully.'}
+        return {"statusCode": 200, "body": "Comment posted to PR successfully."}
     else:
         logger.info("No pull_request event found in the webhook")
         return {"statusCode": 200, "body": json.dumps(event)}

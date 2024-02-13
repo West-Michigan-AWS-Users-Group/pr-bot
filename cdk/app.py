@@ -15,7 +15,7 @@ from constructs import Construct
 
 stack_name_short = "PrBot"
 deployed_environments = ["dev", "prod"]
-lambda_pip_deps = ["langchain", "PyGithub", "Cryptography"]
+lambda_pip_deps = ["langchain", "PyGithub"]
 
 
 def install_and_create_lambda_layer(modules: list[str]) -> str:
@@ -33,13 +33,23 @@ def install_and_create_lambda_layer(modules: list[str]) -> str:
 
         for module in modules:
             # Install the module in the layer directory
-            subprocess.run(["pip", "install", module, "-t", layer_dir])
+            subprocess.run(
+                [
+                    "pip",
+                    "install",
+                    "--platform=manylinux1_x86_64",
+                    "--only-binary=:all:",
+                    module,
+                    "-t",
+                    layer_dir,
+                ]
+            )
 
         zip_file_name = f"{stack_name_short}_layer.zip"
         zip_file_path = os.path.join(os.getcwd(), zip_file_name)
 
         # Use shutil.make_archive to create the ZIP file
-        shutil.make_archive(zip_file_path[:-4], 'zip', temp_dir)
+        shutil.make_archive(zip_file_path[:-4], "zip", temp_dir)
 
         print(f"Lambda layer package '{zip_file_name}' created successfully.")
         return zip_file_path
