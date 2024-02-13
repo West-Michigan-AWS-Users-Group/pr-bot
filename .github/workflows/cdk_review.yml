@@ -1,6 +1,6 @@
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [develop]
     paths:
       - cdk/**
     types: [opened, reopened, synchronize]
@@ -40,23 +40,8 @@ jobs:
           aws-secret-access-key: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_SECRET_ACCESS_KEY }}
           aws-region: "us-west-2"
 
-      - name: Set Stack Name
-        run: |
-          if [ "$GITHUB_REF" == "refs/heads/develop" ]; then
-            STACK_NAME="devPrBot"
-          elif [ "$GITHUB_REF" == "refs/heads/main" ]; then
-            STACK_NAME="prodPrBot"
-          else
-            echo "Skipping workflow for branch $GITHUB_REF"
-            exit 0
-          fi
-          echo "Setting stack name to $STACK_NAME"
-          echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
-
       - name: CDK synth
-        if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
-        run: cd cdk && cdk synth ${{ env.STACK_NAME }} --require-approval=never
+        run: cd cdk && cdk synth devPrBot --require-approval=never
 
       - name: CDK diff
-        if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
-        run: cd cdk && cdk diff ${{ env.STACK_NAME }} --require-approval=never
+        run: cd cdk && cdk diff devPrBot --require-approval=never
