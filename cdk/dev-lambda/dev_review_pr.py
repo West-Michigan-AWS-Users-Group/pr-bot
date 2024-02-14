@@ -64,6 +64,7 @@ def prompt_bedrock(diff_code: str) -> str:
         input_variables=["diff"],
         template="""
 
+
 Human: You are being provided a diff of code changes in a PR. The diff needs to be reviewed for any potential issues.
 The diff needs to be summarized in 10 bullet points or less. The summary should include the following:
 - What is being changed and try to infer why
@@ -86,6 +87,7 @@ that this is an auto-generated comment using the exact phrase below, without quo
 <diff>
 {diff}
 </diff>
+
 
 Assistant: """,
     )
