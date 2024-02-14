@@ -75,7 +75,7 @@ def prompt_bedrock(diff_code: str) -> str:
     }
 
     textgen_llm = Bedrock(
-        model_id="anthropic.claude-v2",
+        model_id="anthropic.claude-v2:1",
         client=get_bedrock_client(),
         model_kwargs=inference_modifier,
     )
@@ -84,32 +84,44 @@ def prompt_bedrock(diff_code: str) -> str:
         input_variables=["diff"],
         template="""
 
-
 Human: You are being provided a diff of code changes in a PR. The diff needs to be reviewed for any potential issues.
-The diff needs to be summarized in 10 bullet points or less. The summary should include the following:
-- What is being changed and try to infer why
-- Any code formatting issues. If the language is Python, be sure to mention any PEP8 violations
-- Any potential issues with the code changes that are identified
+
+The diff is provided below between the diff tags.
+
+<diff>
+{diff}
+</diff>
+
+The diff needs to be summarized in 10 bullet points or less. The summary should include what is being changed
+and why. 
 
 If there are less than 10 bullet points, that is okay. If there are more than 10 bullet points, please summarize the 
-most important points. Post this message in markdown formatting. At the start of the respsonse, please include source
+most important points. Post this message in markdown formatting. At the start of the response, please include source
  branch and target branch of the PR in the following format:
  
 " <source_branch> --> <target_branch> "
 
 Be sure to include the arrow between the source and target branches and make this a Heading2 in markdown.
+For every bullet point, do not put an empty line between them. Example:
+- item1
+- item2
+
+Next, make any code recommendations or suggestions for the PR in 10 bullet points or less.
+Identify any improvements that can made to the code. This can include:
+- Code readability
+- Code efficiency
+- Code maintainability
+- Code security
+- Code style and formatting adherence to PEP8 standards if Python
+
 
 At the bottom of your response, be sure to indicate
 that this is an auto-generated comment using the exact phrase below, without quotes and ensure it is italicised.
 
 "This is an automated comment from PrBot."
 
-<diff>
-{diff}
-</diff>
 
-
-Assistant: """,
+Assistant:""",
     )
 
     prompt = pr_review_prompt.format(diff=diff_code)
