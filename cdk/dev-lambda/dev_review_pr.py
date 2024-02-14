@@ -25,7 +25,7 @@ def get_bedrock_client():
     retry_config = Config(
         region_name="us-west-2",
         retries={
-            "max_attempts": 10,
+            "max_attempts": 20,
             "mode": "standard",
         },
     )
@@ -92,8 +92,12 @@ The diff is provided below between the diff tags.
 {diff}
 </diff>
 
-The diff needs to be summarized in 10 bullet points or less. The summary should include what is being changed
-and why. 
+The diff needs to be summarized in 10 bullet points or less. Do not put a blank line between
+each bullet point.
+The summary should include the following:
+- What is being changed and try to infer why
+- Any code formatting issues. If the language is Python, be sure to mention any PEP8 violations
+- Any potential issues with the code changes that are identified
 
 If there are less than 10 bullet points, that is okay. If there are more than 10 bullet points, please summarize the 
 most important points. Post this message in markdown formatting. At the start of the response, please include source
@@ -102,18 +106,6 @@ most important points. Post this message in markdown formatting. At the start of
 " <source_branch> --> <target_branch> "
 
 Be sure to include the arrow between the source and target branches and make this a Heading2 in markdown.
-For every bullet point, do not put an empty line between them. Example:
-- item1
-- item2
-
-Next, make any code recommendations or suggestions for the PR in 10 bullet points or less.
-Identify any improvements that can made to the code. This can include:
-- Code readability
-- Code efficiency
-- Code maintainability
-- Code security
-- Code style and formatting adherence to PEP8 standards if Python
-
 
 At the bottom of your response, be sure to indicate
 that this is an auto-generated comment using the exact phrase below, without quotes and ensure it is italicised.
@@ -185,8 +177,9 @@ def handler(event, context):
         try:
             diff = get_diff_from_pr(pr_diff_url)
             # replace the exact string Human and Assistant with empty string to prevent LLM confusion
-            logger.info("diff fetched successfully: \n%s", diff)
+            logger.info("diff fetched successfully")
             diff = format_diff(diff)
+            logger.info("diff formatted output: \n%s", diff)
         except Exception as e:
             message = f"Error fetching diff url: {e}"
             logger.error(message)
