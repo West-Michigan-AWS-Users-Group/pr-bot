@@ -38,6 +38,26 @@ def get_bedrock_client():
     return bedrock_client
 
 
+def format_diff(diff: str) -> str:
+    """
+    Format the diff to be used in the prompt by stripping out problematic strings such as Human, Assistant, Diff, etc.
+    diff: str: Multi-line GitHub diff output from a pull request.
+
+    """
+    # Remove exact strings
+    for removal in ["```", "Human", "Assistant", "diff", "</diff>", "<diff>", "```"]:
+        diff = diff.replace(removal, "")
+    # Strip leading and trailing whitespace
+    diff = diff.strip()
+    # Parse lines for the diff that are problematic
+    lines = diff.split('\n')
+    # Remove json serialized string in the diff, or else the LLM hangs
+    filtered_lines = [line for line in lines if not line.startswith('+    "body": "{')]
+    diff = '\n'.join(filtered_lines)
+    logger.info("diff formatted successfully")
+    return diff
+
+
 def prompt_bedrock(diff_code: str) -> str:
     """
     Generate a prompt for the Bedrock API
@@ -154,13 +174,7 @@ def handler(event, context):
             diff = get_diff_from_pr(pr_diff_url)
             # replace the exact string Human and Assistant with empty string to prevent LLM confusion
             logger.info("diff fetched successfully: \n%s", diff)
-            diff = (
-                diff.replace("Human", "")
-                .replace("Assistant", "")
-                .replace("</diff>", "")
-                .replace("<diff>", "")
-                .replace("diff", "")
-            )
+            diff = format_diff(diff)
         except Exception as e:
             message = f"Error fetching diff url: {e}"
             logger.error(message)
