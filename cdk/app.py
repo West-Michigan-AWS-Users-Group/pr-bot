@@ -7,7 +7,6 @@ from aws_cdk import (
     aws_apigatewayv2_integrations,
     aws_lambda,
     aws_iam,
-    PolicyStatement,
     Stack,
     SecretValue,
     Tags,
@@ -85,7 +84,7 @@ class PrBot(Stack):
 
         # Add policy allowing access to AWS bedrock
         review_pr.add_to_role_policy(
-            statement=PolicyStatement(
+            statement=aws_iam.PolicyStatement(
                 actions=[
                     "bedrock:*",
                 ],
