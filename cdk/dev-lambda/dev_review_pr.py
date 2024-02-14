@@ -153,8 +153,14 @@ def handler(event, context):
         try:
             diff = get_diff_from_pr(pr_diff_url)
             # replace the exact string Human and Assistant with empty string to prevent LLM confusion
-            diff = diff.replace("Human:", "").replace("Assistant:", "")
-            logger.info("diff fetched successfully: %s", diff)
+            logger.info("diff fetched successfully: \n%s", diff)
+            diff = (
+                diff.replace("Human", "")
+                .replace("Assistant", "")
+                .replace("</diff>", "")
+                .replace("<diff>", "")
+                .replace("diff", "")
+            )
         except Exception as e:
             message = f"Error fetching diff url: {e}"
             logger.error(message)

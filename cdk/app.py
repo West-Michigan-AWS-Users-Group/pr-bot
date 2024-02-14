@@ -81,8 +81,8 @@ class PrBot(Stack):
             handler=lambda_handler,
             layers=[pypi_layer],
             runtime=aws_lambda.Runtime.PYTHON_3_11,
-            timeout=Duration.minutes(5),
-            memory_size=2048,
+            timeout=Duration.minutes(15),
+            memory_size=256,
         )
 
         # Add policy allowing access to AWS bedrock
