@@ -157,7 +157,7 @@ def handler(event, context):
             return {"statusCode": 500, "body": message}
 
         try:
-            logger.info("Generating bedrock response")
+            logger.info("Prompting bedrock with diff.")
             bedrock_response = prompt_bedrock(diff)
             logger.info("bedrock response: %s", bedrock_response)
         except Exception as e:
