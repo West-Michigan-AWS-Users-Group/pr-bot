@@ -96,19 +96,19 @@ The diff needs to be summarized in 10 bullet points or less. Do not put a blank 
 each bullet point.
 The summary should include the following:
 - What is being changed and try to infer why
-- Any code formatting issues. If the language is Python, be sure to mention any PEP8 violations
+- Any code formatting issues. If the language is Python, be sure to mention any PEP8 violations or other style guide violations
 - Any potential issues with the code changes that are identified
 
 If there are less than 10 bullet points, that is okay. If there are more than 10 bullet points, please summarize the 
 most important points. Post this message in markdown formatting. At the start of the response, please include source
- branch and target branch of the PR in the following format:
+branch and target branch of the PR in the following format:
  
-" <source_branch> --> <target_branch> "
+"## `source_branch` --> `target_branch` "
 
 Be sure to include the arrow between the source and target branches and make this a Heading2 in markdown.
 
-At the bottom of your response, be sure to indicate
-that this is an auto-generated comment using the exact phrase below, without quotes and ensure it is italicised.
+At the bottom of your response, be sure to indicate this is an auto-generated comment using the exact phrase below, 
+without quotes and ensure it is italicised.
 
 "This is an automated comment from PrBot."
 
