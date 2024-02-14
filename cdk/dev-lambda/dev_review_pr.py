@@ -1,9 +1,13 @@
 import json
+from botocore.config import Config
+import boto3
 import logging
 import os
 import urllib.request
 
 from github import Auth, Github, PullRequest
+from langchain.llms.bedrock import Bedrock
+from langchain.prompts import PromptTemplate
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -13,6 +17,79 @@ request_id = os.environ["AWS_REQUEST_ID"]
 env_var_value = os.environ.get("GITHUB_TOKEN")
 env_var_dict = json.loads(env_var_value)
 github_token = env_var_dict.get("GITHUB_TOKEN")
+
+
+def get_bedrock_client():
+    """
+    Set up the boto3 bedrock client
+    """
+    retry_config = Config(
+        region_name="us-west-2",
+        retries={
+            "max_attempts": 10,
+            "mode": "standard",
+        },
+    )
+    client_kwargs = {"region_name": "us-west-2"}
+    session = boto3.Session(**client_kwargs)
+    bedrock_client = session.client(
+        service_name="bedrock-runtime", config=retry_config, **client_kwargs
+    )
+    logger.info("bedrock client created successfully")
+    return bedrock_client
+
+
+def prompt_bedrock(diff_code: str) -> str:
+    """
+    Generate a prompt for the Bedrock API
+    diff_code: str: Multi-line GitHub diff output from a pull request.
+
+    """
+
+    # Bedrock configuration values
+    inference_modifier = {
+        "max_tokens_to_sample": 4096,
+        "temperature": 0.5,
+        "top_k": 250,
+        "top_p": 1,
+        "stop_sequences": ["\n\nHuman"],
+    }
+
+    textgen_llm = Bedrock(
+        model_id="anthropic.claude-v2",
+        client=get_bedrock_client(),
+        model_kwargs=inference_modifier,
+    )
+
+    pr_review_prompt = PromptTemplate(
+        input_variables=["diff"],
+        template="""
+
+    Human: You are being provided a diff of code changes in a PR. The diff needs to be reviewed for any potential issues.
+    The diff needs to be summarized in 10 bullet points or less. The summary should include the following:
+    - What is being changed and try to infer why
+    - Any code formatting issues. If the language is Python, be sure to mention any PEP8 violations
+    - Any potential issues with the code changes that are identified
+
+    If there are less than 10 bullet points, that is okay. If there are more than 10 bullet points, please summarize the 
+    most important points. Post this message in markdown formatting. At the bottom of your response, be sure to indicate
+    that this is an auto-generated comment using the exact phrase below, without quotes and ensure it is italicised.
+    
+    "This is an automated comment from PrBot."
+
+    <diff>
+    {diff}
+    </diff>
+
+    Assistant: """,
+    )
+
+    prompt = pr_review_prompt.format(diff=diff_code)
+    logger.info("prompt generated successfully")
+    logger.debug("prompt: %s", prompt)
+    response = textgen_llm(prompt)
+
+    return response
 
 
 def authenticate_github(auth_token: str) -> Github:
@@ -67,9 +144,18 @@ def handler(event, context):
         # fetch diff url contents
         try:
             diff = get_diff_from_pr(pr_diff_url)
-            logger.info("diff: %s", diff)
+            logger.info("diff fetched successfully: %s", diff)
         except Exception as e:
             message = f"Error fetching diff url: {e}"
+            logger.error(message)
+            return {"statusCode": 500, "body": message}
+
+        try:
+            logger.info("Generating bedrock response")
+            bedrock_response = prompt_bedrock(diff)
+            logger.info("bedrock response: %s", bedrock_response)
+        except Exception as e:
+            message = f"Error generating bedrock response: {e}"
             logger.error(message)
             return {"statusCode": 500, "body": message}
 
@@ -81,11 +167,7 @@ def handler(event, context):
             logger.info("pr: %s", pr)
             post_comment_to_pr(
                 pr,
-                f"""Test comment from pr-bot development environment. 
-PR Number: {pr_number}
-Lambda RequestID: {request_id}
-_this is an auto-generated comment_
-""",
+                bedrock_response,
             )
         except Exception as e:
             message = f"Error posting comment to pr: {e}"

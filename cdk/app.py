@@ -6,6 +6,8 @@ from aws_cdk import (
     aws_apigatewayv2,
     aws_apigatewayv2_integrations,
     aws_lambda,
+    aws_iam,
+    PolicyStatement,
     Stack,
     SecretValue,
     Tags,
@@ -79,6 +81,16 @@ class PrBot(Stack):
             handler=lambda_handler,
             layers=[pypi_layer],
             runtime=aws_lambda.Runtime.PYTHON_3_11,
+        )
+
+        # Add policy allowing access to AWS bedrock
+        review_pr.add_to_role_policy(
+            statement=PolicyStatement(
+                actions=[
+                    "bedrock:*",
+                ],
+                resources=["*"],
+            )
         )
 
         webhook_api = aws_apigatewayv2.HttpApi(
