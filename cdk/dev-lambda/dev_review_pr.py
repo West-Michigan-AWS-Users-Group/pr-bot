@@ -11,7 +11,6 @@ from langchain.prompts import PromptTemplate
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-request_id = os.environ["AWS_REQUEST_ID"]
 
 # Get environment variable
 env_var_value = os.environ.get("GITHUB_TOKEN")
@@ -62,7 +61,7 @@ def prompt_bedrock(diff_code: str) -> str:
     )
 
     pr_review_prompt = PromptTemplate(
-        input_variables=["diff", "request_id"],
+        input_variables=["diff"],
         template="""
 
     Human: You are being provided a diff of code changes in a PR. The diff needs to be reviewed for any potential issues.
@@ -82,7 +81,7 @@ def prompt_bedrock(diff_code: str) -> str:
     At the bottom of your response, be sure to indicate
     that this is an auto-generated comment using the exact phrase below, without quotes and ensure it is italicised.
     
-    "This is an automated comment from PrBot requestId {request_id}."
+    "This is an automated comment from PrBot."
 
     <diff>
     {diff}
@@ -91,7 +90,7 @@ def prompt_bedrock(diff_code: str) -> str:
     Assistant: """,
     )
 
-    prompt = pr_review_prompt.format(diff=diff_code, request_id=request_id)
+    prompt = pr_review_prompt.format(diff=diff_code)
     logger.info("prompt generated successfully")
     logger.debug("prompt: %s", prompt)
     response = textgen_llm(prompt)
