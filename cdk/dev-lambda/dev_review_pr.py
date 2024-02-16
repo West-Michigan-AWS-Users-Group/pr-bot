@@ -1,10 +1,10 @@
 import json
-from botocore.config import Config
-import boto3
 import logging
 import os
 import urllib.request
 
+import boto3
+from botocore.config import Config
 from github import Auth, Github, PullRequest
 from langchain.llms.bedrock import Bedrock
 from langchain.prompts import PromptTemplate
@@ -50,10 +50,10 @@ def format_diff(diff: str) -> str:
     # Strip leading and trailing whitespace
     diff = diff.strip()
     # Parse lines for the diff that are problematic
-    lines = diff.split('\n')
+    lines = diff.split("\n")
     # Remove json serialized string in the diff, or else the LLM hangs
     filtered_lines = [line for line in lines if not line.startswith('+    "body": "{')]
-    diff = '\n'.join(filtered_lines)
+    diff = "\n".join(filtered_lines)
     logger.info("diff formatted successfully")
     return diff
 
@@ -137,8 +137,19 @@ def authenticate_github(auth_token: str) -> Github:
     return g
 
 
-def get_diff_from_pr(pr_diff_url: str) -> str:
-    response = urllib.request.urlopen(pr_diff_url)
+def get_diff_from_pr(pr_diff_url: str, gh_token: str) -> str:
+    """
+    Get the diff from a pull request using the GitHub API
+    :param pr_diff_url:
+    :param gh_token:
+    :return:
+    """
+    headers = {
+        "Accept": "application/vnd.github.v3.diff",
+        "Authorization": f"Bearer {gh_token}",
+    }
+    request = urllib.request.Request(pr_diff_url, headers=headers)
+    response = urllib.request.urlopen(request)
     content = response.read()
     decoded_content = content.decode("utf-8")
     return decoded_content
@@ -175,7 +186,7 @@ def handler(event, context):
 
         # fetch diff url contents
         try:
-            diff = get_diff_from_pr(pr_diff_url)
+            diff = get_diff_from_pr(pr_diff_url, github_token)
             # replace the exact string Human and Assistant with empty string to prevent LLM confusion
             logger.info("diff fetched successfully")
             diff = format_diff(diff)
