@@ -177,7 +177,7 @@ def handler(event, context):
             logger.info("pr_number: %s", pr_number)
             repo_name = github_webhook["repository"]["full_name"]
             logger.info("repo: %s", repo_name)
-            pr_diff_url = github_webhook["pull_request"]["diff_url"]
+            pr_diff_url = github_webhook["pull_request"]["url"]
             logger.info("pr_diff_url: %s", pr_diff_url)
         except Exception as e:
             message = f"Error assigning required values to python variables: {e}"
