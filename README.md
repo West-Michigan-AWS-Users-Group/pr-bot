@@ -1,31 +1,16 @@
 # pr-bot
-A repo containing AWS resources used to provide feedbacks on GitHub pull requests
+A repo containing AWS resources used to provide feedback on GitHub pull requests using AWS Bedrock LLMs to
+summarize the changes in the pull request, and provide code reviews based on LLM prompts.
 
+# Architecture
+![architecture-diagram.png](architecture-diagram.png)
 
-# CDK Setup
+# Branch strategy
+`develop` --- deploys the devPrBot stack
 
+`main` -- deploys the prodPrBot stack
+
+Testing the URL:
 ```bash
-python -m ensurepip --upgrade
-python -m pip install --upgrade pip
-python -m pip install --upgrade virtualenv
-
-mkdir cdk
-cd cdk
-cdk init app --language python
-
-# Populate .cdk.env file with AWS account number
-AWS_ACCOUNT_NUMBER="1234567890"
-# Use heredoc to write to the file in the root of the repo
-cat << EOF > ../.cdk.env
-export AWS_ACCOUNT_NUMBER=${AWS_ACCOUNT_NUMBER}
-EOF
-
-# Init environment variables
-source ../.cdk.env
-
-
-pip install --upgrade -r requirements.txt
-
-# Repeat for each region desired
-cdk bootstrap aws://${AWS_ACCOUNT_NUMBER}/us-east-1
+curl -X POST -d '{"foo": "bar"}' -H 'Content-Type: application/json' https://<api_gateway_id>.execute-api.us-west-2.amazonaws.com/live/pr-review
 ```

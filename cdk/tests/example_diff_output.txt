@@ -1,0 +1,1407 @@
+new file mode 100644
+index 0000000..0268374
+--- /dev/null
++++ b/.github/workflows/cdk_deploy.yml
+@@ -0,0 +1,57 @@
++on:
++  push:
++    branches:
++      - develop
++      - main
++
++jobs:
++  build:
++    runs-on: ubuntu-latest
++    steps:
++      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
++      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
++      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
++      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
++      - uses: actions/checkout@v4
++      - name: Set up Python 3.11
++        uses: actions/setup-python@v4
++        with:
++          python-version: "3.11"
++      - name: Set up Node
++        uses: actions/setup-node@v3
++        with:
++          node-version: "20"
++      - name: Install Python dependencies and CDK
++        run: |
++          # install your Python dependencies here
++          npm install -g aws-cdk
++          python -m pip install --use-feature=fast-deps --upgrade pip
++          pip install -r cdk/requirements.txt
++
++      - name: Configure AWS credentials
++        uses: aws-actions/configure-aws-credentials@master
++        with:
++          aws-access-key-id: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_ACCESS_KEY_ID }}
++          aws-secret-access-key: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_SECRET_ACCESS_KEY }}
++          aws-region: "us-west-2"
++      - name: Set Stack Name
++        run: |
++          if [ "$GITHUB_REF" == "refs/heads/develop" ]; then
++            STACK_NAME="devPrBot"
++          elif [ "$GITHUB_REF" == "refs/heads/main" ]; then
++            STACK_NAME="prodPrBot"
++          else
++            echo "Skipping workflow for branch $GITHUB_REF"
++            exit 0
++          fi
++          echo "Setting stack name to $STACK_NAME"
++          echo "STACK_NAME=$STACK_NAME" >> $GITHUB_ENV
++      - name: CDK synth
++        if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
++        run: cd cdk && cdk synth ${{ env.STACK_NAME }} --require-approval=never
++      - name: CDK diff
++        if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
++        run: cd cdk && cdk diff ${{ env.STACK_NAME }} --require-approval=never
++      - name: CDK deploy
++        if: ${{ env.STACK_NAME == 'devPrBot' || env.STACK_NAME == 'prodPrBot' }}
++        run: cd cdk && cdk deploy ${{ env.STACK_NAME }} --require-approval=never
+diff --git a/.github/workflows/cdk_review.yml b/.github/workflows/cdk_review.yml
+new file mode 100644
+index 0000000..6d79e09
+--- /dev/null
++++ b/.github/workflows/cdk_review.yml
+@@ -0,0 +1,47 @@
++on:
++  pull_request:
++    branches: [develop]
++    paths:
++      - cdk/**
++    types: [opened, reopened, synchronize]
++
++  workflow_dispatch:
++
++jobs:
++  build:
++    runs-on: ubuntu-latest
++    steps:
++      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
++      - run: echo "🐧 This job is now running on a ${{ runner.os }} server hosted by GitHub!"
++      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
++      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
++      - uses: actions/checkout@v4
++      - name: Set up Python 3.11
++        uses: actions/setup-python@v4
++        with:
++          python-version: "3.11"
++
++      - name: Set up Node
++        uses: actions/setup-node@v3
++        with:
++          node-version: "20"
++
++      - name: Install Python dependencies and CDK
++        run: |
++          # install your Python dependencies here
++          npm install -g aws-cdk
++          python -m pip install --use-feature=fast-deps --upgrade pip
++          pip install -r cdk/requirements.txt
++
++      - name: Configure AWS credentials
++        uses: aws-actions/configure-aws-credentials@master
++        with:
++          aws-access-key-id: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_ACCESS_KEY_ID }}
++          aws-secret-access-key: ${{ secrets.SA_CDK_DEPLOYUSER_AWS_SECRET_ACCESS_KEY }}
++          aws-region: "us-west-2"
++
++      - name: CDK synth
++        run: cd cdk && cdk synth devPrBot --require-approval=never
++
++      - name: CDK diff
++        run: cd cdk && cdk diff devPrBot --require-approval=never
+diff --git a/.gitignore b/.gitignore
+index 551d174..31f1323 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -153,9 +153,13 @@ dmypy.json
+ cython_debug/
+
+ # PyCharm
+-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+-#.idea/
++.idea/
++
++# environment files
+ *.env
++
++# Mac
++.DS_Store
++
++# lambda layer
++*layer.zip*
+\ No newline at end of file
+diff --git a/.idea/.gitignore b/.idea/.gitignore
+deleted file mode 100644
+index 13566b8..0000000
+--- a/.idea/.gitignore
++++ /dev/null
+@@ -1,8 +0,0 @@
+-# Default ignored files
+-/shelf/
+-/workspace.xml
+-# Editor-based HTTP Client requests
+-/httpRequests/
+-# Datasource local storage ignored files
+-/dataSources/
+-/dataSources.local.xml
+diff --git a/README.md b/README.md
+index 0566302..700e6f9 100644
+--- a/README.md
++++ b/README.md
+@@ -1,31 +1,16 @@
+ # pr-bot
+-A repo containing AWS resources used to provide feedbacks on GitHub pull requests
++A repo containing AWS resources used to provide feedback on GitHub pull requests using AWS Bedrock LLMs to
++summarize the changes in the pull request, and provide code reviews based on LLM prompts.
+
++# Architecture
++![architecture-diagram.png](architecture-diagram.png)
+
+-# CDK Setup
++# Branch strategy
++`develop` --- deploys the devPrBot stack
+
+-```bash
+-python -m ensurepip --upgrade
+-python -m pip install --upgrade pip
+-python -m pip install --upgrade virtualenv
+-
+-mkdir cdk
+-cd cdk
+-cdk init app --language python
+-
+-# Populate .cdk.env file with AWS account number
+-AWS_ACCOUNT_NUMBER="1234567890"
+-# Use heredoc to write to the file in the root of the repo
+-cat << EOF > ../.cdk.env
+-export AWS_ACCOUNT_NUMBER=${AWS_ACCOUNT_NUMBER}
+-EOF
+-
+-# Init environment variables
+-source ../.cdk.env
++`main` -- deploys the prodPrBot stack
+
+-
+-pip install --upgrade -r requirements.txt
+-
+-# Repeat for each region desired
+-cdk bootstrap aws://${AWS_ACCOUNT_NUMBER}/us-east-1
++Testing the URL:
++```bash
++curl -X POST -d '
+{
+    "foo": "bar"
+}
+' -H 'Content-Type: application/json' https://<api_gateway_id>.execute-api.us-west-2.amazonaws.com/live/pr-review
+ ```
+\ No newline at end of file
+diff --git a/architecture-diagram.png b/architecture-diagram.png
+new file mode 100644
+index 0000000..f5130ea
+Binary files /dev/null and b/architecture-diagram.png differ
+diff --git a/cdk/.gitignore b/cdk/.gitignore
+index 37833f8..8fc1c7b 100644
+--- a/cdk/.gitignore
++++ b/cdk/.gitignore
+@@ -8,3 +8,11 @@ __pycache__
+ # CDK asset staging directory
+ .cdk.staging
+ cdk.out
++
++# Jetbrains files
++.idea/
++**/.idea/*
++
++# layer related files
++PrBot_layer.zip
++/python*
+diff --git a/cdk/Dockerfile b/cdk/Dockerfile
+new file mode 100644
+index 0000000..166118d
+--- /dev/null
++++ b/cdk/Dockerfile
+@@ -0,0 +1,21 @@
++# Use the official Python runtime as the base image
++FROM python:3.11
++
++# Set the working directory in the container
++WORKDIR /app
++
++# Install any necessary dependencies
++RUN apt-get update && \
++    apt-get install -y zip && \
++    rm -rf /var/lib/apt/lists/*
++
++# Copy the requirements file to the working directory
++COPY dev-lambda/requirements.txt .
++
++# Install the Python packages listed in requirements.txt
++RUN pip install --platform manylinux2014_x86_64 --only-binary=:all: -r requirements.txt -t /opt/python/
++
++# Set the CMD to zip the installed packages into a layer
++# change the `requests-layer` to the LAYER_NAME variable as per create_layer.sh file
++
++CMD cd /opt && zip -r9 /app/prbot-layer.zip .
+diff --git a/cdk/README.md b/cdk/README.md
+new file mode 100644
+index 0000000..c53f0b5
+--- /dev/null
++++ b/cdk/README.md
+@@ -0,0 +1,58 @@
++
++# Welcome to your CDK Python project!
++
++This is a blank project for CDK development with Python.
++
++The `cdk.json` file tells the CDK Toolkit how to execute your app.
++
++This project is set up like a standard Python project.  The initialization
++process also creates a virtualenv within this project, stored under the `.venv`
++directory.  To create the virtualenv it assumes that there is a `python3`
++(or `python` for Windows) executable in your path with access to the `venv`
++package. If for any reason the automatic creation of the virtualenv fails,
++you can create the virtualenv manually.
++
++To manually create a virtualenv on MacOS and Linux:
++
++```
++$ python3 -m venv .venv
++```
++
++After the init process completes and the virtualenv is created, you can use the following
++step to activate your virtualenv.
++
++```
++$ source .venv/bin/activate
++```
++
++If you are a Windows platform, you would activate the virtualenv like this:
++
++```
++% .venv\Scripts\activate.bat
++```
++
++Once the virtualenv is activated, you can install the required dependencies.
++
++```
++$ pip install -r requirements.txt
++```
++
++At this point you can now synthesize the CloudFormation template for this code.
++
++```
++$ cdk synth
++```
++
++To add additional dependencies, for example other CDK libraries, just add
++them to your `setup.py` file and rerun the `pip install -r requirements.txt`
++command.
++
++## Useful commands
++
++ * `cdk ls`          list all stacks in the app
++ * `cdk synth`       emits the synthesized CloudFormation template
++ * `cdk deploy`      deploy this stack to your default AWS account/region
++ * `cdk diff`        compare deployed stack with current state
++ * `cdk docs`        open CDK documentation
++
++Enjoy!
+diff --git a/cdk/app.py b/cdk/app.py
+new file mode 100644
+index 0000000..250d094
+--- /dev/null
++++ b/cdk/app.py
+@@ -0,0 +1,165 @@
++#!/usr/bin/env python3
++import os
++import shutil
++import subprocess
++
++from aws_cdk import (
++    aws_apigatewayv2,
++    aws_apigatewayv2_integrations,
++    aws_lambda,
++    Stack,
++    SecretValue,
++    Tags,
++    Environment,
++    App
++)
++from constructs import Construct
++
++stack_name_short = "PrBot"
++deployed_environments = ["dev", "prod"]
++# lambda_pip_deps = ["PyGithub"]
++#
++#
++# def install_and_create_lambda_layer(modules: list[str]) -> str:
++#     """
++#     Install the specified Python modules and create a Lambda layer package.
++#     :param modules: List of Python modules to install
++#     :return: Path to the created Lambda layer package
++#     """
++#     temp_dir = "temp_layer"
++#     os.makedirs(temp_dir, exist_ok=True)
++#
++#     try:
++#         layer_dir = os.path.join(temp_dir, "python/lib/python3.11/site-packages/")
++#         os.makedirs(layer_dir, exist_ok=True)
++#
++#         for module in modules:
++#             # Install the module in the layer directory
++#             subprocess.run(
++#                 [
++#                     "pip",
++#                     "install",
++#                     module,
++#                     "-t",
++#                     layer_dir,
++#                 ]
++#             )
++#
++#         zip_file_name = f"{stack_name_short}_layer.zip"
++#         zip_file_path = os.path.join(os.getcwd(), zip_file_name)
++#
++#         # Use shutil.make_archive to create the ZIP file
++#         shutil.make_archive(zip_file_path[:-4], "zip", temp_dir)
++#
++#         print(f"Lambda layer package '{zip_file_name}' created successfully.")
++#         return zip_file_path
++#     except Exception as e:
++#         print(f"Error creating Lambda layer package: {e}")
++#     finally:
++#         # Clean up: remove the temporary directory
++#         shutil.rmtree(temp_dir, ignore_errors=True)
++
++
++class PrBot(Stack):
++    def __init__(self, scope: Construct, id: str, **kwargs) -> None:
++        super().__init__(scope, id, **kwargs)
++
++        if "dev" in id:
++            lambda_handler = "dev_review_pr.handler"
++            stack_environment = "dev"
++        elif "prod" in id:
++            lambda_handler = "prod_review_pr.handler"
++            stack_environment = "prod"
++        else:
++            lambda_handler = None
++            stack_environment = None
++            raise ValueError(f"Invalid environment value declared for stack {id}.")
++
++        try:
++            result = subprocess.run(["/bin/bash", "./create-layer-docker.sh"], check=True, text=True,
++                                    capture_output=True)
++            print("Script output:", result.stdout)
++        except subprocess.CalledProcessError as e:
++            print("Error executing script:", e)
++            print("Script output (if any):", e.output)
++
++        layer_path = "layers/prbot-layer.zip"
++
++        pypi_layer = aws_lambda.LayerVersion(
++            self,
++            id=f"{id}prReviewPypiLayer",
++            code=aws_lambda.Code.from_asset(
++                path=layer_path,
++            ),
++            compatible_runtimes=[aws_lambda.Runtime.PYTHON_3_11],
++            description="LangChain dependency",
++        )
++
++        # Define the Lambda function
++        review_pr = aws_lambda.Function(
++            self,
++            f"{id}reviewPr",
++            code=aws_lambda.Code.from_asset(
++                f"{stack_environment}-lambda",
++            ),
++            environment={
++                "GITHUB_TOKEN": SecretValue.secrets_manager(
++                    f"/{stack_environment}/{stack_name_short}/GITHUB_TOKEN",
++                ).unsafe_unwrap(),
++            },
++            handler=lambda_handler,
++            layers=[pypi_layer],
++            runtime=aws_lambda.Runtime.PYTHON_3_11,
++        )
++
++        webhook_api = aws_apigatewayv2.HttpApi(
++            self,
++            f"{id}webhookApi",
++            create_default_stage=True,
++            description="Webhook API for PR review",
++        )
++
++        webhook_api.add_stage(
++            f"{id}webhookApiStage",
++            stage_name="live",
++            auto_deploy=True,
++        )
++
++        pr_review_integration = aws_apigatewayv2_integrations.HttpLambdaIntegration(
++            f"{id}webhookApiPrReviewIntegration", review_pr
++        )
++
++        webhook_api.add_routes(
++            path="/pr-review",
++            methods=[aws_apigatewayv2.HttpMethod.POST],
++            integration=pr_review_integration,
++        )
++
++
++app = App()
++
++for environment in deployed_environments:
++    stack_name_l = f"{environment}{stack_name_short}"
++    prbot_stack = PrBot(
++        app,
++        stack_name_l,
++        # If you don't specify 'env', this stack will be environment-agnostic.
++        # Account/Region-dependent features and context lookups will not work,
++        # but a single synthesized template can be deployed anywhere.
++        # Uncomment the next line to specialize this stack for the AWS Account
++        # and Region that are implied by the current CLI configuration.
++        # env=cdk.Environment(account=os.getenv('CDK_DEFAULT_ACCOUNT'), region=os.getenv('CDK_DEFAULT_REGION')),
++        # Uncomment the next line if you know exactly what Account and Region you
++        # want to deploy the stack to. */
++        env=Environment(
++            account=os.getenv("AWS_ACCOUNT_NUMBER"), region="us-west-2"
++        ),
++        # For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html
++    )
++    Tags.of(prbot_stack).add("environment", environment)
++    Tags.of(prbot_stack).add("stack", stack_name_l)
++    Tags.of(prbot_stack).add("service", "pr-bot")
++    Tags.of(prbot_stack).add("user", "tnielsen")
++    Tags.of(prbot_stack).add("deployment_method", "CDK")
++
++app.synth()
+diff --git a/cdk/cdk.json b/cdk/cdk.json
+new file mode 100644
+index 0000000..eb79b78
+--- /dev/null
++++ b/cdk/cdk.json
+@@ -0,0 +1,62 @@
++{
++  "app": "python3 app.py",
++  "watch": {
++    "include": [
++      "**"
++    ],
++    "exclude": [
++      "README.md",
++      "cdk*.json",
++      "requirements*.txt",
++      "source.bat",
++      "**/__init__.py",
++      "**/__pycache__",
++      "tests"
++    ]
++  },
++  "context": {
++    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
++    "@aws-cdk/core:checkSecretUsage": true,
++    "@aws-cdk/core:target-partitions": [
++      "aws",
++      "aws-cn"
++    ],
++    "@aws-cdk-containers/ecs-service-extensions:enableDefaultLogDriver": true,
++    "@aws-cdk/aws-ec2:uniqueImdsv2TemplateName": true,
++    "@aws-cdk/aws-ecs:arnFormatIncludesClusterName": true,
++    "@aws-cdk/aws-iam:minimizePolicies": true,
++    "@aws-cdk/core:validateSnapshotRemovalPolicy": true,
++    "@aws-cdk/aws-codepipeline:crossAccountKeyAliasStackSafeResourceName": true,
++    "@aws-cdk/aws-s3:createDefaultLoggingPolicy": true,
++    "@aws-cdk/aws-sns-subscriptions:restrictSqsDescryption": true,
++    "@aws-cdk/aws-apigateway:disableCloudWatchRole": true,
++    "@aws-cdk/core:enablePartitionLiterals": true,
++    "@aws-cdk/aws-events:eventsTargetQueueSameAccount": true,
++    "@aws-cdk/aws-iam:standardizedServicePrincipals": true,
++    "@aws-cdk/aws-ecs:disableExplicitDeploymentControllerForCircuitBreaker": true,
++    "@aws-cdk/aws-iam:importedRoleStackSafeDefaultPolicyName": true,
++    "@aws-cdk/aws-s3:serverAccessLogsUseBucketPolicy": true,
++    "@aws-cdk/aws-route53-patters:useCertificate": true,
++    "@aws-cdk/customresources:installLatestAwsSdkDefault": false,
++    "@aws-cdk/aws-rds:databaseProxyUniqueResourceName": true,
++    "@aws-cdk/aws-codedeploy:removeAlarmsFromDeploymentGroup": true,
++    "@aws-cdk/aws-apigateway:authorizerChangeDeploymentLogicalId": true,
++    "@aws-cdk/aws-ec2:launchTemplateDefaultUserData": true,
++    "@aws-cdk/aws-secretsmanager:useAttachedSecretResourcePolicyForSecretTargetAttachments": true,
++    "@aws-cdk/aws-redshift:columnId": true,
++    "@aws-cdk/aws-stepfunctions-tasks:enableEmrServicePolicyV2": true,
++    "@aws-cdk/aws-ec2:restrictDefaultSecurityGroup": true,
++    "@aws-cdk/aws-apigateway:requestValidatorUniqueId": true,
++    "@aws-cdk/aws-kms:aliasNameRef": true,
++    "@aws-cdk/aws-autoscaling:generateLaunchTemplateInsteadOfLaunchConfig": true,
++    "@aws-cdk/core:includePrefixInUniqueNameGeneration": true,
++    "@aws-cdk/aws-efs:denyAnonymousAccess": true,
++    "@aws-cdk/aws-opensearchservice:enableOpensearchMultiAzWithStandby": true,
++    "@aws-cdk/aws-lambda-nodejs:useLatestRuntimeVersion": true,
++    "@aws-cdk/aws-efs:mountTargetOrderInsensitiveLogicalId": true,
++    "@aws-cdk/aws-rds:auroraClusterChangeScopeOfInstanceParameterGroupWithEachParameters": true,
++    "@aws-cdk/aws-appsync:useArnForSourceApiAssociationIdentifier": true,
++    "@aws-cdk/aws-rds:preventRenderingDeprecatedCredentials": true,
++    "@aws-cdk/aws-codepipeline-actions:useNewDefaultBranchForCodeCommitSource": true
++  }
++}
+diff --git a/cdk/cdk/__init__.py b/cdk/cdk/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/cdk/cdk/cdk_stack.py b/cdk/cdk/cdk_stack.py
+new file mode 100644
+index 0000000..83c60af
+--- /dev/null
++++ b/cdk/cdk/cdk_stack.py
+@@ -0,0 +1,19 @@
++from aws_cdk import (
++    # Duration,
++    Stack,
++    # aws_sqs as sqs,
++)
++from constructs import Construct
++
++
++class CdkStack(Stack):
++    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
++        super().__init__(scope, construct_id, **kwargs)
++
++        # The code that defines your stack goes here
++
++        # example resource
++        # queue = sqs.Queue(
++        #     self, "CdkQueue",
++        #     visibility_timeout=Duration.seconds(300),
++        # )
+diff --git a/cdk/create-layer-docker.sh b/cdk/create-layer-docker.sh
+new file mode 100755
+index 0000000..1a2153b
+--- /dev/null
++++ b/cdk/create-layer-docker.sh
+@@ -0,0 +1,29 @@
++#!/bin/bash
++
++# Set the directory where the Dockerfile and requirements.txt are located
++DIRECTORY="$(pwd)"
++
++# Change it as per your requirement
++LAYER_NAME="prbot-layer"
++
++# Build the Docker image
++docker build -t lambda-layer "$DIRECTORY"
++
++# Run the Docker container to create the layer
++# Corrected the PWD to use lowercase
++docker run -v "$DIRECTORY:/app" --name lambda-layer-container lambda-layer
++
++# create layers directory, if not created.
++mkdir -p layers
++
++# Move the zip file in layers directory.
++mv "$DIRECTORY/$LAYER_NAME.zip" "layers/$LAYER_NAME.zip"
++
++# Stop the container
++docker stop lambda-layer-container
++
++# Remove the running container
++docker rm lambda-layer-container
++
++# Cleanup: remove the Docker image
++docker rmi --force lambda-layer
+diff --git a/cdk/dev-lambda/dev_review_pr.py b/cdk/dev-lambda/dev_review_pr.py
+new file mode 100644
+index 0000000..1cf3800
+--- /dev/null
++++ b/cdk/dev-lambda/dev_review_pr.py
+@@ -0,0 +1,88 @@
++import json
++import logging
++import os
++import urllib.request
++
++from github import Auth, Github, PullRequest
++
++logger = logging.getLogger()
++logger.setLevel(logging.INFO)
++
++# Get environment variable
++env_var_value = os.environ.get("GITHUB_TOKEN")
++env_var_dict = json.loads(env_var_value)
++github_token = env_var_dict.get("GITHUB_TOKEN")
++
++
++def authenticate_github(auth_token: str) -> Github:
++    auth = Auth.Token(auth_token)
++    logger.info("auth: %s", auth)
++    try:
++        g = Github(auth=auth)
++    except Exception as e:
++        message = f"Error authenticating with Github: {e}"
++        logger.error(message)
++        raise Exception(message)
++    return g
++
++
++def get_diff_from_pr(pr_diff_url: str) -> str:
++    response = urllib.request.urlopen(pr_diff_url)
++    content = response.read()
++    decoded_content = content.decode("utf-8")
++    return decoded_content
++
++
++def post_comment_to_pr(pr: PullRequest, comment: str) -> None:
++    pr.create_issue_comment(comment)
++
++
++def handler(event, context):
++    try:
++        github_webhook = json.loads(event["body"])
++        logger.info("event: %s", json.dumps(event))
++        logger.info('event["body"]: %s', json.dumps(github_webhook))
++    except Exception as e:
++        message = f"Error parsing webhook body: {e}"
++        logger.error(message)
++        return {"statusCode": 500, "body": message}
++
++    if pull_request_event := github_webhook.get("pull_request"):
++        logger.info("pull_request_event: %s", pull_request_event)
++        # assign required values to python variables
++        try:
++            pr_number = github_webhook["number"]
++            logger.info("pr_number: %s", pr_number)
++            repo_name = github_webhook["repository"]["full_name"]
++            logger.info("repo: %s", repo_name)
++            pr_diff_url = github_webhook["pull_request"]["diff_url"]
++            logger.info("pr_diff_url: %s", pr_diff_url)
++        except Exception as e:
++            message = f"Error assigning required values to python variables: {e}"
++            logger.error(message)
++            return {"statusCode": 500, "body": message}
++
++        # fetch diff url
++        try:
++            diff = get_diff_from_pr(pr_diff_url)
++            logger.info("diff: %s", diff)
++        except Exception as e:
++            message = f"Error fetching diff url: {e}"
++            logger.error(message)
++            return {"statusCode": 500, "body": message}
++
++        # auth with github and post comment to pr
++        try:
++            g_session = authenticate_github(github_token)
++            pr = g_session.get_pull(pr_number)
++            post_comment_to_pr(pr, "Test comment from pr-bot development environment")
++        except Exception as e:
++            message = f"Error posting comment to pr: {e}"
++            logger.error(message)
++            return {"statusCode": 500, "body": message}
++
++        logger.info("Comment posted to PR successfully.")
++        return
+{
+    "statusCode": 200,
+    "body": "Comment posted to PR successfully."
+}
+
++    else:
++        logger.info("No pull_request event found in the webhook")
++        return {"statusCode": 200, "body": json.dumps(event)}
+diff --git a/cdk/dev-lambda/requirements.txt b/cdk/dev-lambda/requirements.txt
+new file mode 100755
+index 0000000..89064f1
+--- /dev/null
++++ b/cdk/dev-lambda/requirements.txt
+@@ -0,0 +1,2 @@
++PyGithub
++langchain
+diff --git a/cdk/prod-lambda/prod_review_pr.py b/cdk/prod-lambda/prod_review_pr.py
+new file mode 100644
+index 0000000..6f8ef58
+--- /dev/null
++++ b/cdk/prod-lambda/prod_review_pr.py
+@@ -0,0 +1,38 @@
++import os
++import json
++import requests
++import logging
++
++GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
++RESPONSE_STATUS_CODE_KEY = "statusCode"
++RESPONSE_BODY_KEY = "body"
++
++
++def process_webhook_body(body, token):
++    logging.info("Received GitHub webhook event")
++    logging.info(body)
++    pull_request = json.loads(body).get("pull_request")
++    if pull_request is not None:
++        pr_url = pull_request.get("url")
++        # Add logic to fetch PR details using GitHub API
++        pr_data = requests.get(
++            pr_url, headers={"Authorization": f"token {token}"}
++        ).json()
++        # Extract relevant information from PR data for LangChain code review
++        # This depends highly on the inputs needed by LangChain and Bedrock.
++        # Code here is just a placeholder until more clarification on these services is needed.
++        # Call AWS Bedrock / LangChain services for code review
++        # Depends on API and method to call these services, as these are not standard AWS services and may have custom methods.
++
++
++def process_pull_request(event, context):
++    # Fetching the GITHUB_TOKEN from environment variables
++    github_token = os.getenv(GITHUB_TOKEN)
++    # Parsing GitHub webhook event body
++    body = event.get(RESPONSE_BODY_KEY)
++    if body is not None:
++        process_webhook_body(body, github_token)
++    return {
++        RESPONSE_STATUS_CODE_KEY: 200,
++        RESPONSE_BODY_KEY: json.dumps("Pull request processed"),
++    }
+diff --git a/cdk/requirements.txt b/cdk/requirements.txt
+new file mode 100644
+index 0000000..7cc86f3
+--- /dev/null
++++ b/cdk/requirements.txt
+@@ -0,0 +1,4 @@
++aws-cdk-lib==2.126.0
++constructs>=10.0.0,<11.0.0
++requests
++pytest
+diff --git a/cdk/source.bat b/cdk/source.bat
+new file mode 100644
+index 0000000..9e1a834
+--- /dev/null
++++ b/cdk/source.bat
+@@ -0,0 +1,13 @@
++@echo off
++
++rem The sole purpose of this script is to make the command
++rem
++rem     source .venv/bin/activate
++rem
++rem (which activates a Python virtualenv on Linux or Mac OS X) work on Windows.
++rem On Windows, this command just runs this batch file (the argument is ignored).
++rem
++rem Now we don't need to document a Windows command for activating a virtualenv.
++
++echo Executing .venv\Scripts\activate.bat for you
++.venv\Scripts\activate.bat
+diff --git a/cdk/tests/__init__.py b/cdk/tests/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/cdk/tests/pr_webhoook.json b/cdk/tests/pr_webhoook.json
+new file mode 100644
+index 0000000..9292d63
+--- /dev/null
++++ b/cdk/tests/pr_webhoook.json
+@@ -0,0 +1,526 @@
++{
++  "action": "edited",
++  "number": 2,
++  "pull_request": {
++    "url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2",
++    "id": 1720183488,
++    "node_id": "PR_kwDOK76zhs5mh-rA",
++    "html_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot/pull/2",
++    "diff_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot/pull/2.diff",
++    "patch_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot/pull/2.patch",
++    "issue_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/2",
++    "number": 2,
++    "state": "open",
++    "locked": false,
++    "title": "Merge to main",
++    "user": {
++      "login": "tnielsen2",
++      "id": 21163004,
++      "node_id": "MDQ6VXNlcjIxMTYzMDA0",
++      "avatar_url": "https://avatars.githubusercontent.com/u/21163004?v=4",
++      "gravatar_id": "",
++      "url": "https://api.github.com/users/tnielsen2",
++      "html_url": "https://github.com/tnielsen2",
++      "followers_url": "https://api.github.com/users/tnielsen2/followers",
++      "following_url": "https://api.github.com/users/tnielsen2/following{/other_user}",
++      "gists_url": "https://api.github.com/users/tnielsen2/gists{/gist_id}",
++      "starred_url": "https://api.github.com/users/tnielsen2/starred{/owner}{/repo}",
++      "subscriptions_url": "https://api.github.com/users/tnielsen2/subscriptions",
++      "organizations_url": "https://api.github.com/users/tnielsen2/orgs",
++      "repos_url": "https://api.github.com/users/tnielsen2/repos",
++      "events_url": "https://api.github.com/users/tnielsen2/events{/privacy}",
++      "received_events_url": "https://api.github.com/users/tnielsen2/received_events",
++      "type": "User",
++      "site_admin": false
++    },
++    "body": "Pr changes to get this up and going off the ground to enable the development of PR webhooks with AWS bedrock and GitHub.\r\n\r\n- Fix GitHub actions workflow and container running CI so we do not get the PIP perpetual doom scroll\r\n- `.gitignore` Jetbrains files\r\n- Update README.md\r\n- Update cdk app to have all the necessary constructs",
++    "created_at": "2024-02-10T04:15:41Z",
++    "updated_at": "2024-02-10T04:15:54Z",
++    "closed_at": null,
++    "merged_at": null,
++    "merge_commit_sha": "300b700a4dd2b9316e0df839e43a32a13dd8917f",
++    "assignee": null,
++    "assignees": [],
++    "requested_reviewers": [],
++    "requested_teams": [],
++    "labels": [],
++    "milestone": null,
++    "draft": false,
++    "commits_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2/commits",
++    "review_comments_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2/comments",
++    "review_comment_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/comments{/number}",
++    "comments_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/2/comments",
++    "statuses_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/statuses/3ade1a959bb49d48d20867007ce5a8c391ed0f1a",
++    "head": {
++      "label": "West-Michigan-AWS-Users-Group:develop",
++      "ref": "develop",
++      "sha": "3ade1a959bb49d48d20867007ce5a8c391ed0f1a",
++      "user": {
++        "login": "West-Michigan-AWS-Users-Group",
++        "id": 157604175,
++        "node_id": "O_kgDOCWTZTw",
++        "avatar_url": "https://avatars.githubusercontent.com/u/157604175?v=4",
++        "gravatar_id": "",
++        "url": "https://api.github.com/users/West-Michigan-AWS-Users-Group",
++        "html_url": "https://github.com/West-Michigan-AWS-Users-Group",
++        "followers_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/followers",
++        "following_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/following{/other_user}",
++        "gists_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/gists{/gist_id}",
++        "starred_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/starred{/owner}{/repo}",
++        "subscriptions_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/subscriptions",
++        "organizations_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/orgs",
++        "repos_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/repos",
++        "events_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/events{/privacy}",
++        "received_events_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/received_events",
++        "type": "Organization",
++        "site_admin": false
++      },
++      "repo": {
++        "id": 733918086,
++        "node_id": "R_kgDOK76zhg",
++        "name": "pr-bot",
++        "full_name": "West-Michigan-AWS-Users-Group/pr-bot",
++        "private": false,
++        "owner": {
++          "login": "West-Michigan-AWS-Users-Group",
++          "id": 157604175,
++          "node_id": "O_kgDOCWTZTw",
++          "avatar_url": "https://avatars.githubusercontent.com/u/157604175?v=4",
++          "gravatar_id": "",
++          "url": "https://api.github.com/users/West-Michigan-AWS-Users-Group",
++          "html_url": "https://github.com/West-Michigan-AWS-Users-Group",
++          "followers_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/followers",
++          "following_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/following{/other_user}",
++          "gists_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/gists{/gist_id}",
++          "starred_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/starred{/owner}{/repo}",
++          "subscriptions_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/subscriptions",
++          "organizations_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/orgs",
++          "repos_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/repos",
++          "events_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/events{/privacy}",
++          "received_events_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/received_events",
++          "type": "Organization",
++          "site_admin": false
++        },
++        "html_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot",
++        "description": "A repo containing AWS resources used to provide feedbacks on GitHub pull requests",
++        "fork": false,
++        "url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot",
++        "forks_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/forks",
++        "keys_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/keys{/key_id}",
++        "collaborators_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/collaborators{/collaborator}",
++        "teams_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/teams",
++        "hooks_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/hooks",
++        "issue_events_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/events{/number}",
++        "events_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/events",
++        "assignees_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/assignees{/user}",
++        "branches_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/branches{/branch}",
++        "tags_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/tags",
++        "blobs_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/blobs{/sha}",
++        "git_tags_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/tags{/sha}",
++        "git_refs_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/refs{/sha}",
++        "trees_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/trees{/sha}",
++        "statuses_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/statuses/{sha}",
++        "languages_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/languages",
++        "stargazers_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/stargazers",
++        "contributors_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contributors",
++        "subscribers_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscribers",
++        "subscription_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscription",
++        "commits_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/commits{/sha}",
++        "git_commits_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/commits{/sha}",
++        "comments_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/comments{/number}",
++        "issue_comment_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/comments{/number}",
++        "contents_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contents/{+path}",
++        "compare_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/compare/{base}...{head}",
++        "merges_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/merges",
++        "archive_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/{archive_format}{/ref}",
++        "downloads_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/downloads",
++        "issues_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues{/number}",
++        "pulls_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls{/number}",
++        "milestones_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/milestones{/number}",
++        "notifications_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/notifications{?since,all,participating}",
++        "labels_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/labels{/name}",
++        "releases_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/releases{/id}",
++        "deployments_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/deployments",
++        "created_at": "2023-12-20T12:34:13Z",
++        "updated_at": "2024-02-01T15:14:36Z",
++        "pushed_at": "2024-02-10T04:15:41Z",
++        "git_url": "git://github.com/West-Michigan-AWS-Users-Group/pr-bot.git",
++        "ssh_url": "git@github.com:West-Michigan-AWS-Users-Group/pr-bot.git",
++        "clone_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot.git",
++        "svn_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot",
++        "homepage": null,
++        "size": 104,
++        "stargazers_count": 0,
++        "watchers_count": 0,
++        "language": null,
++        "has_issues": true,
++        "has_projects": true,
++        "has_downloads": true,
++        "has_wiki": false,
++        "has_pages": false,
++        "has_discussions": false,
++        "forks_count": 0,
++        "mirror_url": null,
++        "archived": false,
++        "disabled": false,
++        "open_issues_count": 1,
++        "license": {
++          "key": "gpl-3.0",
++          "name": "GNU General Public License v3.0",
++          "spdx_id": "GPL-3.0",
++          "url": "https://api.github.com/licenses/gpl-3.0",
++          "node_id": "MDc6TGljZW5zZTk="
++        },
++        "allow_forking": true,
++        "is_template": false,
++        "web_commit_signoff_required": false,
++        "topics": [],
++        "visibility": "public",
++        "forks": 0,
++        "open_issues": 1,
++        "watchers": 0,
++        "default_branch": "main",
++        "allow_squash_merge": true,
++        "allow_merge_commit": true,
++        "allow_rebase_merge": true,
++        "allow_auto_merge": false,
++        "delete_branch_on_merge": false,
++        "allow_update_branch": false,
++        "use_squash_pr_title_as_default": false,
++        "squash_merge_commit_message": "COMMIT_MESSAGES",
++        "squash_merge_commit_title": "COMMIT_OR_PR_TITLE",
++        "merge_commit_message": "PR_TITLE",
++        "merge_commit_title": "MERGE_MESSAGE"
++      }
++    },
++    "base": {
++      "label": "West-Michigan-AWS-Users-Group:main",
++      "ref": "main",
++      "sha": "059791a330dd2228cb674ab4101cec5df1c9843a",
++      "user": {
++        "login": "West-Michigan-AWS-Users-Group",
++        "id": 157604175,
++        "node_id": "O_kgDOCWTZTw",
++        "avatar_url": "https://avatars.githubusercontent.com/u/157604175?v=4",
++        "gravatar_id": "",
++        "url": "https://api.github.com/users/West-Michigan-AWS-Users-Group",
++        "html_url": "https://github.com/West-Michigan-AWS-Users-Group",
++        "followers_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/followers",
++        "following_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/following{/other_user}",
++        "gists_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/gists{/gist_id}",
++        "starred_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/starred{/owner}{/repo}",
++        "subscriptions_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/subscriptions",
++        "organizations_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/orgs",
++        "repos_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/repos",
++        "events_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/events{/privacy}",
++        "received_events_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/received_events",
++        "type": "Organization",
++        "site_admin": false
++      },
++      "repo": {
++        "id": 733918086,
++        "node_id": "R_kgDOK76zhg",
++        "name": "pr-bot",
++        "full_name": "West-Michigan-AWS-Users-Group/pr-bot",
++        "private": false,
++        "owner": {
++          "login": "West-Michigan-AWS-Users-Group",
++          "id": 157604175,
++          "node_id": "O_kgDOCWTZTw",
++          "avatar_url": "https://avatars.githubusercontent.com/u/157604175?v=4",
++          "gravatar_id": "",
++          "url": "https://api.github.com/users/West-Michigan-AWS-Users-Group",
++          "html_url": "https://github.com/West-Michigan-AWS-Users-Group",
++          "followers_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/followers",
++          "following_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/following{/other_user}",
++          "gists_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/gists{/gist_id}",
++          "starred_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/starred{/owner}{/repo}",
++          "subscriptions_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/subscriptions",
++          "organizations_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/orgs",
++          "repos_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/repos",
++          "events_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/events{/privacy}",
++          "received_events_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/received_events",
++          "type": "Organization",
++          "site_admin": false
++        },
++        "html_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot",
++        "description": "A repo containing AWS resources used to provide feedbacks on GitHub pull requests",
++        "fork": false,
++        "url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot",
++        "forks_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/forks",
++        "keys_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/keys{/key_id}",
++        "collaborators_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/collaborators{/collaborator}",
++        "teams_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/teams",
++        "hooks_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/hooks",
++        "issue_events_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/events{/number}",
++        "events_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/events",
++        "assignees_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/assignees{/user}",
++        "branches_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/branches{/branch}",
++        "tags_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/tags",
++        "blobs_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/blobs{/sha}",
++        "git_tags_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/tags{/sha}",
++        "git_refs_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/refs{/sha}",
++        "trees_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/trees{/sha}",
++        "statuses_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/statuses/{sha}",
++        "languages_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/languages",
++        "stargazers_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/stargazers",
++        "contributors_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contributors",
++        "subscribers_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscribers",
++        "subscription_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscription",
++        "commits_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/commits{/sha}",
++        "git_commits_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/commits{/sha}",
++        "comments_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/comments{/number}",
++        "issue_comment_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/comments{/number}",
++        "contents_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contents/{+path}",
++        "compare_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/compare/{base}...{head}",
++        "merges_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/merges",
++        "archive_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/{archive_format}{/ref}",
++        "downloads_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/downloads",
++        "issues_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues{/number}",
++        "pulls_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls{/number}",
++        "milestones_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/milestones{/number}",
++        "notifications_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/notifications{?since,all,participating}",
++        "labels_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/labels{/name}",
++        "releases_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/releases{/id}",
++        "deployments_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/deployments",
++        "created_at": "2023-12-20T12:34:13Z",
++        "updated_at": "2024-02-01T15:14:36Z",
++        "pushed_at": "2024-02-10T04:15:41Z",
++        "git_url": "git://github.com/West-Michigan-AWS-Users-Group/pr-bot.git",
++        "ssh_url": "git@github.com:West-Michigan-AWS-Users-Group/pr-bot.git",
++        "clone_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot.git",
++        "svn_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot",
++        "homepage": null,
++        "size": 104,
++        "stargazers_count": 0,
++        "watchers_count": 0,
++        "language": null,
++        "has_issues": true,
++        "has_projects": true,
++        "has_downloads": true,
++        "has_wiki": false,
++        "has_pages": false,
++        "has_discussions": false,
++        "forks_count": 0,
++        "mirror_url": null,
++        "archived": false,
++        "disabled": false,
++        "open_issues_count": 1,
++        "license": {
++          "key": "gpl-3.0",
++          "name": "GNU General Public License v3.0",
++          "spdx_id": "GPL-3.0",
++          "url": "https://api.github.com/licenses/gpl-3.0",
++          "node_id": "MDc6TGljZW5zZTk="
++        },
++        "allow_forking": true,
++        "is_template": false,
++        "web_commit_signoff_required": false,
++        "topics": [],
++        "visibility": "public",
++        "forks": 0,
++        "open_issues": 1,
++        "watchers": 0,
++        "default_branch": "main",
++        "allow_squash_merge": true,
++        "allow_merge_commit": true,
++        "allow_rebase_merge": true,
++        "allow_auto_merge": false,
++        "delete_branch_on_merge": false,
++        "allow_update_branch": false,
++        "use_squash_pr_title_as_default": false,
++        "squash_merge_commit_message": "COMMIT_MESSAGES",
++        "squash_merge_commit_title": "COMMIT_OR_PR_TITLE",
++        "merge_commit_message": "PR_TITLE",
++        "merge_commit_title": "MERGE_MESSAGE"
++      }
++    },
++    "_links": {
++      "self": {
++        "href": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2"
++      },
++      "html": {
++        "href": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot/pull/2"
++      },
++      "issue": {
++        "href": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/2"
++      },
++      "comments": {
++        "href": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/2/comments"
++      },
++      "review_comments": {
++        "href": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2/comments"
++      },
++      "review_comment": {
++        "href": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/comments{/number}"
++      },
++      "commits": {
++        "href": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2/commits"
++      },
++      "statuses": {
++        "href": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/statuses/3ade1a959bb49d48d20867007ce5a8c391ed0f1a"
++      }
++    },
++    "author_association": "COLLABORATOR",
++    "auto_merge": null,
++    "active_lock_reason": null,
++    "merged": false,
++    "mergeable": true,
++    "rebaseable": true,
++    "mergeable_state": "clean",
++    "merged_by": null,
++    "comments": 0,
++    "review_comments": 0,
++    "maintainer_can_modify": false,
++    "commits": 42,
++    "additions": 405,
++    "deletions": 33,
++    "changed_files": 18
++  },
++  "changes": {
++    "title": {
++      "from": "Merge to develop"
++    }
++  },
++  "repository": {
++    "id": 733918086,
++    "node_id": "R_kgDOK76zhg",
++    "name": "pr-bot",
++    "full_name": "West-Michigan-AWS-Users-Group/pr-bot",
++    "private": false,
++    "owner": {
++      "login": "West-Michigan-AWS-Users-Group",
++      "id": 157604175,
++      "node_id": "O_kgDOCWTZTw",
++      "avatar_url": "https://avatars.githubusercontent.com/u/157604175?v=4",
++      "gravatar_id": "",
++      "url": "https://api.github.com/users/West-Michigan-AWS-Users-Group",
++      "html_url": "https://github.com/West-Michigan-AWS-Users-Group",
++      "followers_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/followers",
++      "following_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/following{/other_user}",
++      "gists_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/gists{/gist_id}",
++      "starred_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/starred{/owner}{/repo}",
++      "subscriptions_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/subscriptions",
++      "organizations_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/orgs",
++      "repos_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/repos",
++      "events_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/events{/privacy}",
++      "received_events_url": "https://api.github.com/users/West-Michigan-AWS-Users-Group/received_events",
++      "type": "Organization",
++      "site_admin": false
++    },
++    "html_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot",
++    "description": "A repo containing AWS resources used to provide feedbacks on GitHub pull requests",
++    "fork": false,
++    "url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot",
++    "forks_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/forks",
++    "keys_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/keys{/key_id}",
++    "collaborators_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/collaborators{/collaborator}",
++    "teams_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/teams",
++    "hooks_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/hooks",
++    "issue_events_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/events{/number}",
++    "events_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/events",
++    "assignees_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/assignees{/user}",
++    "branches_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/branches{/branch}",
++    "tags_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/tags",
++    "blobs_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/blobs{/sha}",
++    "git_tags_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/tags{/sha}",
++    "git_refs_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/refs{/sha}",
++    "trees_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/trees{/sha}",
++    "statuses_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/statuses/{sha}",
++    "languages_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/languages",
++    "stargazers_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/stargazers",
++    "contributors_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contributors",
++    "subscribers_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscribers",
++    "subscription_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscription",
++    "commits_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/commits{/sha}",
++    "git_commits_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/commits{/sha}",
++    "comments_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/comments{/number}",
++    "issue_comment_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/comments{/number}",
++    "contents_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contents/{+path}",
++    "compare_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/compare/{base}...{head}",
++    "merges_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/merges",
++    "archive_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/{archive_format}{/ref}",
++    "downloads_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/downloads",
++    "issues_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues{/number}",
++    "pulls_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls{/number}",
++    "milestones_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/milestones{/number}",
++    "notifications_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/notifications{?since,all,participating}",
++    "labels_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/labels{/name}",
++    "releases_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/releases{/id}",
++    "deployments_url": "https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/deployments",
++    "created_at": "2023-12-20T12:34:13Z",
++    "updated_at": "2024-02-01T15:14:36Z",
++    "pushed_at": "2024-02-10T04:15:41Z",
++    "git_url": "git://github.com/West-Michigan-AWS-Users-Group/pr-bot.git",
++    "ssh_url": "git@github.com:West-Michigan-AWS-Users-Group/pr-bot.git",
++    "clone_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot.git",
++    "svn_url": "https://github.com/West-Michigan-AWS-Users-Group/pr-bot",
++    "homepage": null,
++    "size": 104,
++    "stargazers_count": 0,
++    "watchers_count": 0,
++    "language": null,
++    "has_issues": true,
++    "has_projects": true,
++    "has_downloads": true,
++    "has_wiki": false,
++    "has_pages": false,
++    "has_discussions": false,
++    "forks_count": 0,
++    "mirror_url": null,
++    "archived": false,
++    "disabled": false,
++    "open_issues_count": 1,
++    "license": {
++      "key": "gpl-3.0",
++      "name": "GNU General Public License v3.0",
++      "spdx_id": "GPL-3.0",
++      "url": "https://api.github.com/licenses/gpl-3.0",
++      "node_id": "MDc6TGljZW5zZTk="
++    },
++    "allow_forking": true,
++    "is_template": false,
++    "web_commit_signoff_required": false,
++    "topics": [],
++    "visibility": "public",
++    "forks": 0,
++    "open_issues": 1,
++    "watchers": 0,
++    "default_branch": "main",
++    "custom_properties": {}
++  },
++  "organization": {
++    "login": "West-Michigan-AWS-Users-Group",
++    "id": 157604175,
++    "node_id": "O_kgDOCWTZTw",
++    "url": "https://api.github.com/orgs/West-Michigan-AWS-Users-Group",
++    "repos_url": "https://api.github.com/orgs/West-Michigan-AWS-Users-Group/repos",
++    "events_url": "https://api.github.com/orgs/West-Michigan-AWS-Users-Group/events",
++    "hooks_url": "https://api.github.com/orgs/West-Michigan-AWS-Users-Group/hooks",
++    "issues_url": "https://api.github.com/orgs/West-Michigan-AWS-Users-Group/issues",
++    "members_url": "https://api.github.com/orgs/West-Michigan-AWS-Users-Group/members{/member}",
++    "public_members_url": "https://api.github.com/orgs/West-Michigan-AWS-Users-Group/public_members{/member}",
++    "avatar_url": "https://avatars.githubusercontent.com/u/157604175?v=4",
++    "description": "Projects developed, presented or collaborated on with WMAUG members"
++  },
++  "sender": {
++    "login": "tnielsen2",
++    "id": 21163004,
++    "node_id": "MDQ6VXNlcjIxMTYzMDA0",
++    "avatar_url": "https://avatars.githubusercontent.com/u/21163004?v=4",
++    "gravatar_id": "",
++    "url": "https://api.github.com/users/tnielsen2",
++    "html_url": "https://github.com/tnielsen2",
++    "followers_url": "https://api.github.com/users/tnielsen2/followers",
++    "following_url": "https://api.github.com/users/tnielsen2/following{/other_user}",
++    "gists_url": "https://api.github.com/users/tnielsen2/gists{/gist_id}",
++    "starred_url": "https://api.github.com/users/tnielsen2/starred{/owner}{/repo}",
++    "subscriptions_url": "https://api.github.com/users/tnielsen2/subscriptions",
++    "organizations_url": "https://api.github.com/users/tnielsen2/orgs",
++    "repos_url": "https://api.github.com/users/tnielsen2/repos",
++    "events_url": "https://api.github.com/users/tnielsen2/events{/privacy}",
++    "received_events_url": "https://api.github.com/users/tnielsen2/received_events",
++    "type": "User",
++    "site_admin": false
++  }
++}
+\ No newline at end of file
+diff --git a/cdk/tests/test_event.json b/cdk/tests/test_event.json
+new file mode 100644
+index 0000000..29a325a
+--- /dev/null
++++ b/cdk/tests/test_event.json
+@@ -0,0 +1,42 @@
++{
++    "version": "2.0",
++    "routeKey": "POST /pr-review",
++    "rawPath": "/live/pr-review",
++    "rawQueryString": "",
++    "headers": {
++        "accept": "*/*",
++        "content-length": "27277",
++        "content-type": "application/json",
++        "host": "wkyfnlzaj3.execute-api.us-west-2.amazonaws.com",
++        "user-agent": "GitHub-Hookshot/50103f9",
++        "x-amzn-trace-id": "Root=1-65c6f86f-5b2393516e91bf5a477e3b5e",
++        "x-forwarded-for": "140.82.115.92",
++        "x-forwarded-port": "443",
++        "x-forwarded-proto": "https",
++        "x-github-delivery": "0de82430-c7cb-11ee-9296-96697effc057",
++        "x-github-event": "pull_request",
++        "x-github-hook-id": "459990889",
++        "x-github-hook-installation-target-id": "733918086",
++        "x-github-hook-installation-target-type": "repository"
++    },
++    "requestContext": {
++        "accountId": "994563863465",
++        "apiId": "wkyfnlzaj3",
++        "domainName": "wkyfnlzaj3.execute-api.us-west-2.amazonaws.com",
++        "domainPrefix": "wkyfnlzaj3",
++        "http": {
++            "method": "POST",
++            "path": "/live/pr-review",
++            "protocol": "HTTP/1.1",
++            "sourceIp": "140.82.115.92",
++            "userAgent": "GitHub-Hookshot/50103f9"
++        },
++        "requestId": "S5vBajLPvHcEJmw=",
++        "routeKey": "POST /pr-review",
++        "stage": "live",
++        "time": "10/Feb/2024:04:15:43 +0000",
++        "timeEpoch": 1707538543112
++    },
++    "body": "{\"action\":\"opened\",\"number\":2,\"pull_request\":{\"url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2\",\"id\":1720183488,\"node_id\":\"PR_kwDOK76zhs5mh-rA\",\"html_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot/pull/2\",\"diff_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot/pull/2.diff\",\"patch_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot/pull/2.patch\",\"issue_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/2\",\"number\":2,\"state\":\"open\",\"locked\":false,\"title\":\"Merge to develop\",\"user\":{\"login\":\"tnielsen2\",\"id\":21163004,\"node_id\":\"MDQ6VXNlcjIxMTYzMDA0\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/21163004?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/tnielsen2\",\"html_url\":\"https://github.com/tnielsen2\",\"followers_url\":\"https://api.github.com/users/tnielsen2/followers\",\"following_url\":\"https://api.github.com/users/tnielsen2/following{/other_user}\",\"gists_url\":\"https://api.github.com/users/tnielsen2/gists{/gist_id}\",\"starred_url\":\"https://api.github.com/users/tnielsen2/starred{/owner}{/repo}\",\"subscriptions_url\":\"https://api.github.com/users/tnielsen2/subscriptions\",\"organizations_url\":\"https://api.github.com/users/tnielsen2/orgs\",\"repos_url\":\"https://api.github.com/users/tnielsen2/repos\",\"events_url\":\"https://api.github.com/users/tnielsen2/events{/privacy}\",\"received_events_url\":\"https://api.github.com/users/tnielsen2/received_events\",\"type\":\"User\",\"site_admin\":false},\"body\":\"Pr changes to get this up and going off the ground to enable the development of PR webhooks with AWS bedrock and GitHub.\\r\\n\\r\\n- Fix GitHub actions workflow and container running CI so we do not get the PIP perpetual doom scroll\\r\\n- `.gitignore` Jetbrains files\\r\\n- Update README.md\\r\\n- Update cdk app to have all the necessary constructs\",\"created_at\":\"2024-02-10T04:15:41Z\",\"updated_at\":\"2024-02-10T04:15:41Z\",\"closed_at\":null,\"merged_at\":null,\"merge_commit_sha\":null,\"assignee\":null,\"assignees\":[],\"requested_reviewers\":[],\"requested_teams\":[],\"labels\":[],\"milestone\":null,\"draft\":false,\"commits_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2/commits\",\"review_comments_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2/comments\",\"review_comment_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/comments{/number}\",\"comments_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/2/comments\",\"statuses_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/statuses/3ade1a959bb49d48d20867007ce5a8c391ed0f1a\",\"head\":{\"label\":\"West-Michigan-AWS-Users-Group:develop\",\"ref\":\"develop\",\"sha\":\"3ade1a959bb49d48d20867007ce5a8c391ed0f1a\",\"user\":{\"login\":\"West-Michigan-AWS-Users-Group\",\"id\":157604175,\"node_id\":\"O_kgDOCWTZTw\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/157604175?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group\",\"html_url\":\"https://github.com/West-Michigan-AWS-Users-Group\",\"followers_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/followers\",\"following_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/following{/other_user}\",\"gists_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/gists{/gist_id}\",\"starred_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/starred{/owner}{/repo}\",\"subscriptions_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/subscriptions\",\"organizations_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/orgs\",\"repos_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/repos\",\"events_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/events{/privacy}\",\"received_events_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/received_events\",\"type\":\"Organization\",\"site_admin\":false},\"repo\":{\"id\":733918086,\"node_id\":\"R_kgDOK76zhg\",\"name\":\"pr-bot\",\"full_name\":\"West-Michigan-AWS-Users-Group/pr-bot\",\"private\":false,\"owner\":{\"login\":\"West-Michigan-AWS-Users-Group\",\"id\":157604175,\"node_id\":\"O_kgDOCWTZTw\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/157604175?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group\",\"html_url\":\"https://github.com/West-Michigan-AWS-Users-Group\",\"followers_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/followers\",\"following_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/following{/other_user}\",\"gists_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/gists{/gist_id}\",\"starred_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/starred{/owner}{/repo}\",\"subscriptions_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/subscriptions\",\"organizations_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/orgs\",\"repos_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/repos\",\"events_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/events{/privacy}\",\"received_events_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/received_events\",\"type\":\"Organization\",\"site_admin\":false},\"html_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot\",\"description\":\"A repo containing AWS resources used to provide feedbacks on GitHub pull requests\",\"fork\":false,\"url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot\",\"forks_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/forks\",\"keys_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/keys{/key_id}\",\"collaborators_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/collaborators{/collaborator}\",\"teams_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/teams\",\"hooks_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/hooks\",\"issue_events_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/events{/number}\",\"events_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/events\",\"assignees_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/assignees{/user}\",\"branches_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/branches{/branch}\",\"tags_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/tags\",\"blobs_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/blobs{/sha}\",\"git_tags_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/tags{/sha}\",\"git_refs_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/refs{/sha}\",\"trees_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/trees{/sha}\",\"statuses_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/statuses/{sha}\",\"languages_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/languages\",\"stargazers_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/stargazers\",\"contributors_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contributors\",\"subscribers_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscribers\",\"subscription_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscription\",\"commits_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/commits{/sha}\",\"git_commits_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/commits{/sha}\",\"comments_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/comments{/number}\",\"issue_comment_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/comments{/number}\",\"contents_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contents/{+path}\",\"compare_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/compare/{base}...{head}\",\"merges_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/merges\",\"archive_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/{archive_format}{/ref}\",\"downloads_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/downloads\",\"issues_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues{/number}\",\"pulls_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls{/number}\",\"milestones_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/milestones{/number}\",\"notifications_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/notifications{?since,all,participating}\",\"labels_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/labels{/name}\",\"releases_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/releases{/id}\",\"deployments_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/deployments\",\"created_at\":\"2023-12-20T12:34:13Z\",\"updated_at\":\"2024-02-01T15:14:36Z\",\"pushed_at\":\"2024-02-10T04:15:41Z\",\"git_url\":\"git://github.com/West-Michigan-AWS-Users-Group/pr-bot.git\",\"ssh_url\":\"git@github.com:West-Michigan-AWS-Users-Group/pr-bot.git\",\"clone_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot.git\",\"svn_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot\",\"homepage\":null,\"size\":104,\"stargazers_count\":0,\"watchers_count\":0,\"language\":null,\"has_issues\":true,\"has_projects\":true,\"has_downloads\":true,\"has_wiki\":false,\"has_pages\":false,\"has_discussions\":false,\"forks_count\":0,\"mirror_url\":null,\"archived\":false,\"disabled\":false,\"open_issues_count\":1,\"license\":{\"key\":\"gpl-3.0\",\"name\":\"GNU General Public License v3.0\",\"spdx_id\":\"GPL-3.0\",\"url\":\"https://api.github.com/licenses/gpl-3.0\",\"node_id\":\"MDc6TGljZW5zZTk=\"},\"allow_forking\":true,\"is_template\":false,\"web_commit_signoff_required\":false,\"topics\":[],\"visibility\":\"public\",\"forks\":0,\"open_issues\":1,\"watchers\":0,\"default_branch\":\"main\",\"allow_squash_merge\":true,\"allow_merge_commit\":true,\"allow_rebase_merge\":true,\"allow_auto_merge\":false,\"delete_branch_on_merge\":false,\"allow_update_branch\":false,\"use_squash_pr_title_as_default\":false,\"squash_merge_commit_message\":\"COMMIT_MESSAGES\",\"squash_merge_commit_title\":\"COMMIT_OR_PR_TITLE\",\"merge_commit_message\":\"PR_TITLE\",\"merge_commit_title\":\"MERGE_MESSAGE\"}},\"base\":{\"label\":\"West-Michigan-AWS-Users-Group:main\",\"ref\":\"main\",\"sha\":\"059791a330dd2228cb674ab4101cec5df1c9843a\",\"user\":{\"login\":\"West-Michigan-AWS-Users-Group\",\"id\":157604175,\"node_id\":\"O_kgDOCWTZTw\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/157604175?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group\",\"html_url\":\"https://github.com/West-Michigan-AWS-Users-Group\",\"followers_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/followers\",\"following_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/following{/other_user}\",\"gists_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/gists{/gist_id}\",\"starred_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/starred{/owner}{/repo}\",\"subscriptions_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/subscriptions\",\"organizations_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/orgs\",\"repos_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/repos\",\"events_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/events{/privacy}\",\"received_events_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/received_events\",\"type\":\"Organization\",\"site_admin\":false},\"repo\":{\"id\":733918086,\"node_id\":\"R_kgDOK76zhg\",\"name\":\"pr-bot\",\"full_name\":\"West-Michigan-AWS-Users-Group/pr-bot\",\"private\":false,\"owner\":{\"login\":\"West-Michigan-AWS-Users-Group\",\"id\":157604175,\"node_id\":\"O_kgDOCWTZTw\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/157604175?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group\",\"html_url\":\"https://github.com/West-Michigan-AWS-Users-Group\",\"followers_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/followers\",\"following_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/following{/other_user}\",\"gists_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/gists{/gist_id}\",\"starred_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/starred{/owner}{/repo}\",\"subscriptions_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/subscriptions\",\"organizations_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/orgs\",\"repos_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/repos\",\"events_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/events{/privacy}\",\"received_events_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/received_events\",\"type\":\"Organization\",\"site_admin\":false},\"html_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot\",\"description\":\"A repo containing AWS resources used to provide feedbacks on GitHub pull requests\",\"fork\":false,\"url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot\",\"forks_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/forks\",\"keys_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/keys{/key_id}\",\"collaborators_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/collaborators{/collaborator}\",\"teams_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/teams\",\"hooks_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/hooks\",\"issue_events_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/events{/number}\",\"events_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/events\",\"assignees_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/assignees{/user}\",\"branches_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/branches{/branch}\",\"tags_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/tags\",\"blobs_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/blobs{/sha}\",\"git_tags_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/tags{/sha}\",\"git_refs_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/refs{/sha}\",\"trees_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/trees{/sha}\",\"statuses_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/statuses/{sha}\",\"languages_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/languages\",\"stargazers_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/stargazers\",\"contributors_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contributors\",\"subscribers_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscribers\",\"subscription_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscription\",\"commits_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/commits{/sha}\",\"git_commits_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/commits{/sha}\",\"comments_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/comments{/number}\",\"issue_comment_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/comments{/number}\",\"contents_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contents/{+path}\",\"compare_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/compare/{base}...{head}\",\"merges_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/merges\",\"archive_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/{archive_format}{/ref}\",\"downloads_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/downloads\",\"issues_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues{/number}\",\"pulls_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls{/number}\",\"milestones_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/milestones{/number}\",\"notifications_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/notifications{?since,all,participating}\",\"labels_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/labels{/name}\",\"releases_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/releases{/id}\",\"deployments_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/deployments\",\"created_at\":\"2023-12-20T12:34:13Z\",\"updated_at\":\"2024-02-01T15:14:36Z\",\"pushed_at\":\"2024-02-10T04:15:41Z\",\"git_url\":\"git://github.com/West-Michigan-AWS-Users-Group/pr-bot.git\",\"ssh_url\":\"git@github.com:West-Michigan-AWS-Users-Group/pr-bot.git\",\"clone_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot.git\",\"svn_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot\",\"homepage\":null,\"size\":104,\"stargazers_count\":0,\"watchers_count\":0,\"language\":null,\"has_issues\":true,\"has_projects\":true,\"has_downloads\":true,\"has_wiki\":false,\"has_pages\":false,\"has_discussions\":false,\"forks_count\":0,\"mirror_url\":null,\"archived\":false,\"disabled\":false,\"open_issues_count\":1,\"license\":{\"key\":\"gpl-3.0\",\"name\":\"GNU General Public License v3.0\",\"spdx_id\":\"GPL-3.0\",\"url\":\"https://api.github.com/licenses/gpl-3.0\",\"node_id\":\"MDc6TGljZW5zZTk=\"},\"allow_forking\":true,\"is_template\":false,\"web_commit_signoff_required\":false,\"topics\":[],\"visibility\":\"public\",\"forks\":0,\"open_issues\":1,\"watchers\":0,\"default_branch\":\"main\",\"allow_squash_merge\":true,\"allow_merge_commit\":true,\"allow_rebase_merge\":true,\"allow_auto_merge\":false,\"delete_branch_on_merge\":false,\"allow_update_branch\":false,\"use_squash_pr_title_as_default\":false,\"squash_merge_commit_message\":\"COMMIT_MESSAGES\",\"squash_merge_commit_title\":\"COMMIT_OR_PR_TITLE\",\"merge_commit_message\":\"PR_TITLE\",\"merge_commit_title\":\"MERGE_MESSAGE\"}},\"_links\":{\"self\":{\"href\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2\"},\"html\":{\"href\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot/pull/2\"},\"issue\":{\"href\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/2\"},\"comments\":{\"href\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/2/comments\"},\"review_comments\":{\"href\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2/comments\"},\"review_comment\":{\"href\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/comments{/number}\"},\"commits\":{\"href\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls/2/commits\"},\"statuses\":{\"href\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/statuses/3ade1a959bb49d48d20867007ce5a8c391ed0f1a\"}},\"author_association\":\"COLLABORATOR\",\"auto_merge\":null,\"active_lock_reason\":null,\"merged\":false,\"mergeable\":null,\"rebaseable\":null,\"mergeable_state\":\"unknown\",\"merged_by\":null,\"comments\":0,\"review_comments\":0,\"maintainer_can_modify\":false,\"commits\":42,\"additions\":405,\"deletions\":33,\"changed_files\":18},\"repository\":{\"id\":733918086,\"node_id\":\"R_kgDOK76zhg\",\"name\":\"pr-bot\",\"full_name\":\"West-Michigan-AWS-Users-Group/pr-bot\",\"private\":false,\"owner\":{\"login\":\"West-Michigan-AWS-Users-Group\",\"id\":157604175,\"node_id\":\"O_kgDOCWTZTw\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/157604175?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group\",\"html_url\":\"https://github.com/West-Michigan-AWS-Users-Group\",\"followers_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/followers\",\"following_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/following{/other_user}\",\"gists_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/gists{/gist_id}\",\"starred_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/starred{/owner}{/repo}\",\"subscriptions_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/subscriptions\",\"organizations_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/orgs\",\"repos_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/repos\",\"events_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/events{/privacy}\",\"received_events_url\":\"https://api.github.com/users/West-Michigan-AWS-Users-Group/received_events\",\"type\":\"Organization\",\"site_admin\":false},\"html_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot\",\"description\":\"A repo containing AWS resources used to provide feedbacks on GitHub pull requests\",\"fork\":false,\"url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot\",\"forks_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/forks\",\"keys_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/keys{/key_id}\",\"collaborators_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/collaborators{/collaborator}\",\"teams_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/teams\",\"hooks_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/hooks\",\"issue_events_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/events{/number}\",\"events_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/events\",\"assignees_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/assignees{/user}\",\"branches_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/branches{/branch}\",\"tags_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/tags\",\"blobs_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/blobs{/sha}\",\"git_tags_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/tags{/sha}\",\"git_refs_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/refs{/sha}\",\"trees_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/trees{/sha}\",\"statuses_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/statuses/{sha}\",\"languages_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/languages\",\"stargazers_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/stargazers\",\"contributors_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contributors\",\"subscribers_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscribers\",\"subscription_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/subscription\",\"commits_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/commits{/sha}\",\"git_commits_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/git/commits{/sha}\",\"comments_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/comments{/number}\",\"issue_comment_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues/comments{/number}\",\"contents_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/contents/{+path}\",\"compare_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/compare/{base}...{head}\",\"merges_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/merges\",\"archive_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/{archive_format}{/ref}\",\"downloads_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/downloads\",\"issues_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/issues{/number}\",\"pulls_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/pulls{/number}\",\"milestones_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/milestones{/number}\",\"notifications_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/notifications{?since,all,participating}\",\"labels_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/labels{/name}\",\"releases_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/releases{/id}\",\"deployments_url\":\"https://api.github.com/repos/West-Michigan-AWS-Users-Group/pr-bot/deployments\",\"created_at\":\"2023-12-20T12:34:13Z\",\"updated_at\":\"2024-02-01T15:14:36Z\",\"pushed_at\":\"2024-02-10T04:15:41Z\",\"git_url\":\"git://github.com/West-Michigan-AWS-Users-Group/pr-bot.git\",\"ssh_url\":\"git@github.com:West-Michigan-AWS-Users-Group/pr-bot.git\",\"clone_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot.git\",\"svn_url\":\"https://github.com/West-Michigan-AWS-Users-Group/pr-bot\",\"homepage\":null,\"size\":104,\"stargazers_count\":0,\"watchers_count\":0,\"language\":null,\"has_issues\":true,\"has_projects\":true,\"has_downloads\":true,\"has_wiki\":false,\"has_pages\":false,\"has_discussions\":false,\"forks_count\":0,\"mirror_url\":null,\"archived\":false,\"disabled\":false,\"open_issues_count\":1,\"license\":{\"key\":\"gpl-3.0\",\"name\":\"GNU General Public License v3.0\",\"spdx_id\":\"GPL-3.0\",\"url\":\"https://api.github.com/licenses/gpl-3.0\",\"node_id\":\"MDc6TGljZW5zZTk=\"},\"allow_forking\":true,\"is_template\":false,\"web_commit_signoff_required\":false,\"topics\":[],\"visibility\":\"public\",\"forks\":0,\"open_issues\":1,\"watchers\":0,\"default_branch\":\"main\",\"custom_properties\":{}},\"organization\":{\"login\":\"West-Michigan-AWS-Users-Group\",\"id\":157604175,\"node_id\":\"O_kgDOCWTZTw\",\"url\":\"https://api.github.com/orgs/West-Michigan-AWS-Users-Group\",\"repos_url\":\"https://api.github.com/orgs/West-Michigan-AWS-Users-Group/repos\",\"events_url\":\"https://api.github.com/orgs/West-Michigan-AWS-Users-Group/events\",\"hooks_url\":\"https://api.github.com/orgs/West-Michigan-AWS-Users-Group/hooks\",\"issues_url\":\"https://api.github.com/orgs/West-Michigan-AWS-Users-Group/issues\",\"members_url\":\"https://api.github.com/orgs/West-Michigan-AWS-Users-Group/members{/member}\",\"public_members_url\":\"https://api.github.com/orgs/West-Michigan-AWS-Users-Group/public_members{/member}\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/157604175?v=4\",\"description\":\"Projects developed, presented or collaborated on with WMAUG members\"},\"sender\":{\"login\":\"tnielsen2\",\"id\":21163004,\"node_id\":\"MDQ6VXNlcjIxMTYzMDA0\",\"avatar_url\":\"https://avatars.githubusercontent.com/u/21163004?v=4\",\"gravatar_id\":\"\",\"url\":\"https://api.github.com/users/tnielsen2\",\"html_url\":\"https://github.com/tnielsen2\",\"followers_url\":\"https://api.github.com/users/tnielsen2/followers\",\"following_url\":\"https://api.github.com/users/tnielsen2/following{/other_user}\",\"gists_url\":\"https://api.github.com/users/tnielsen2/gists{/gist_id}\",\"starred_url\":\"https://api.github.com/users/tnielsen2/starred{/owner}{/repo}\",\"subscriptions_url\":\"https://api.github.com/users/tnielsen2/subscriptions\",\"organizations_url\":\"https://api.github.com/users/tnielsen2/orgs\",\"repos_url\":\"https://api.github.com/users/tnielsen2/repos\",\"events_url\":\"https://api.github.com/users/tnielsen2/events{/privacy}\",\"received_events_url\":\"https://api.github.com/users/tnielsen2/received_events\",\"type\":\"User\",\"site_admin\":false}}",
++    "isBase64Encoded": false
++}
+diff --git a/cdk/tests/unit/__init__.py b/cdk/tests/unit/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/cdk/tests/unit/test_cdk_stack.py b/cdk/tests/unit/test_cdk_stack.py
+new file mode 100644
+index 0000000..1b01431
+--- /dev/null
++++ b/cdk/tests/unit/test_cdk_stack.py
+@@ -0,0 +1,17 @@
++import aws_cdk as core
++import aws_cdk.assertions as assertions
++
++from cdk.cdk_stack import CdkStack
++
++
++# example tests. To run these tests, uncomment this file along with the example
++# resource in cdk/cdk_stack.py
++def test_sqs_queue_created():
++    app = core.App()
++    stack = CdkStack(app, "cdk")
++    template = assertions.Template.from_stack(stack)
++
++
++#     template.has_resource_properties("AWS::SQS::Queue", {
++#         "VisibilityTimeout": 300
++#     })
