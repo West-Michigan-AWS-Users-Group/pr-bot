@@ -94,7 +94,8 @@ The diff is provided below between the diff tags.
 </diff>
 
 The diff needs to be summarized in 10 bullet points or less. Do not put a blank line between
-each bullet point.
+each bullet point. Do not say things like "it appears" or "it seems like". Be direct and to the point. You do not
+have to fill each bullet point. If you do not have enough information to fill a bullet point, omit it.
 The summary should include the following:
 - What is being changed and try to infer why
 - Any code formatting issues. If the language is Python, be sure to mention any PEP8 violations or other style guide violations
