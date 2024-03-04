@@ -93,13 +93,26 @@ The diff is provided below between the diff tags.
 {diff}
 </diff>
 
-The diff needs to be summarized in 10 bullet points or less. Do not put a blank line between
-each bullet point. Do not say things like "it appears" or "it seems like". Be direct and to the point. You do not
+This PR diff needs to be analyzed in two sections, up to 10 bullet points or less per section. 
+Do not put a blank line between each bullet point. 
+Do not say things like "it appears" or "it seems like". Be direct and to the point. You do not
 have to fill each bullet point. If you do not have enough information to fill a bullet point, omit it.
-The summary should include the following:
+
+Start each section with a heading markdown format. Section 1 is the "Code Changes" section and Section 2 is the 
+"Potential Issues" section.
+
+The Code Changes summary should include the following:
 - What is being changed and try to infer why
-- Any code formatting issues. If the language is Python, be sure to mention any PEP8 violations or other style guide violations
-- Any potential issues with the code changes that are identified
+- The impact of the code changes
+- Any new functions or classes that are being added
+
+The Potential Issues summary should include the following:
+- Review of comments to ensure they align with the code changes. If not, call it out.
+- Ensure that all code changes in Python require a single quote, except for when formatting requires a double quote.
+- Mention any variable names that do not follow snake case and that seem to not have an underscore delimiter.
+- Ensure that all code changes are PEP8 compliant.
+- Any new function should include a docstring or typehints. If not, call it out.
+- Ensure that all code changes are properly formatted and indented.
 
 If there are less than 10 bullet points, that is okay. If there are more than 10 bullet points, please summarize the 
 most important points. Post this message in markdown formatting. At the start of the response, please include source
