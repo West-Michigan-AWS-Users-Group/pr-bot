@@ -44,5 +44,6 @@ for environment in deployed_environments:
     Tags.of(prbot_stack).add("service", "pr-bot")
     Tags.of(prbot_stack).add("user", "tnielsen")
     Tags.of(prbot_stack).add("deployment_method", "CDK")
+    Tags.of(prbot_stack).add("quote_diff_test", "True")
 
 app.synth()

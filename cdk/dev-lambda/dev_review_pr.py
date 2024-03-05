@@ -142,6 +142,7 @@ Assistant:""",
 
 
 def authenticate_github(auth_token: str) -> Github:
+    # this comment is put here to test the PR bot
     logger.info("attempting to authenticate: %s")
     auth = Auth.Token(auth_token)
     try:
