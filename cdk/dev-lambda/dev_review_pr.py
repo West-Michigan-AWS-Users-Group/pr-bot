@@ -114,6 +114,9 @@ The Potential Issues summary should include the following:
 - Any new function should include a docstring or typehints. If not, call it out.
 - Ensure that all code changes are properly formatted and indented.
 
+If everything looks good in the Potential Issues section, omit it completely. Only includet this section is there are
+violations.
+
 If there are less than 10 bullet points, that is okay. If there are more than 10 bullet points, please summarize the 
 most important points. Post this message in markdown formatting. At the start of the response, please include source
 branch and target branch of the PR in the following format:
