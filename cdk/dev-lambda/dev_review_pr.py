@@ -6,7 +6,7 @@ import urllib.request
 import boto3
 from botocore.config import Config
 from github import Auth, Github, PullRequest
-from langchain_community.llms import Bedrock
+from langchain_aws import ChatBedrock
 from langchain.prompts import PromptTemplate
 
 logger = logging.getLogger()
@@ -75,7 +75,7 @@ def prompt_bedrock(diff_code: str, source_ref: str, target_ref: str) -> str:
         "stop_sequences": ["\n\nHuman"],
     }
 
-    textgen_llm = Bedrock(
+    textgen_llm = ChatBedrock(
         model_id="anthropic.claude-3-opus-20240229-v1:0",
         client=get_bedrock_client(),
         model_kwargs=inference_modifier,
@@ -140,9 +140,9 @@ Assistant:""",
     )
     logger.info("prompt generated successfully")
     logger.debug("prompt: %s", prompt)
-    response = textgen_llm(prompt)
+    response = textgen_llm.invoke(prompt)
 
-    return response
+    return response.content
 
 
 def authenticate_github(auth_token: str) -> Github:
