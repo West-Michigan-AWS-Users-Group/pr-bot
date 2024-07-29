@@ -7,7 +7,7 @@ import boto3
 from botocore.config import Config
 from github import Auth, Github, PullRequest
 from langchain_aws import ChatBedrock
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -81,10 +81,7 @@ def prompt_bedrock(diff_code: str, source_ref: str, target_ref: str) -> str:
         model_kwargs=inference_modifier,
     )
 
-    pr_review_prompt = PromptTemplate(
-        input_variables=["diff", "source_branch", "target_branch"],
-        template="""
-
+    template = """
 Human: You are being provided a diff of code changes in a PR. The diff needs to be reviewed for any potential issues.
 
 The diff is provided below between the diff tags.
@@ -132,15 +129,15 @@ without quotes and ensure it is italicised.
 "This is an automated comment from PrBot."
 
 
-Assistant:""",
-    )
+Assistant:"""
 
-    prompt = pr_review_prompt.format(
+    prompt = ChatPromptTemplate.from_template(
+        template=template,
         diff=diff_code, source_branch=source_ref, target_branch=target_ref
     )
     logger.info("prompt generated successfully")
     logger.debug("prompt: %s", prompt)
-    response = textgen_llm.invoke(prompt)
+    response = textgen_llm.invoke(messages=[prompt], input=prompt)
 
     return response.content
 
