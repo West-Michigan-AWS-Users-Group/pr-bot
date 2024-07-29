@@ -6,7 +6,7 @@ import urllib.request
 import boto3
 from botocore.config import Config
 from github import Auth, Github, PullRequest
-from langchain.llms.bedrock import Bedrock
+from langchain_community.llms import Bedrock
 from langchain.prompts import PromptTemplate
 
 logger = logging.getLogger()
