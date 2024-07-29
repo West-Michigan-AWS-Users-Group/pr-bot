@@ -2,3 +2,4 @@ PyGithub
 langchain
 boto3
 botocore
+langchain_community
