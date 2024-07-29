@@ -76,7 +76,7 @@ def prompt_bedrock(diff_code: str, source_ref: str, target_ref: str) -> str:
     }
 
     textgen_llm = Bedrock(
-        model_id="anthropic.claude-v2:1",
+        model_id="anthropic.claude-3-opus-20240229-v1:0",
         client=get_bedrock_client(),
         model_kwargs=inference_modifier,
     )
@@ -114,8 +114,9 @@ The Potential Issues summary should include the following:
 - Any new function should include a docstring or typehints. If not, call it out.
 - Ensure that all code changes are properly formatted and indented.
 
-If everything looks good in the Potential Issues section, omit it completely. Only includet this section is there are
-violations.
+If everything looks good in the "Potential Issues" section, omit it completely and do not comment anything that indicate
+ that it looks good. Never say "looks good" or "good to go", or anything similar to that. Keep it all factual and
+ only comment on issues.
 
 If there are less than 10 bullet points, that is okay. If there are more than 10 bullet points, please summarize the 
 most important points. Post this message in markdown formatting. At the start of the response, please include source
