@@ -67,9 +67,11 @@ def prompt_bedrock(diff_code: str, source_ref: str, target_ref: str) -> str:
     """
 
     template = """
-Human: You are being provided a diff of code changes in a PR. The diff needs to be reviewed for any potential issues.
+You are being provided a diff of code changes in a PR in raw form. 
 
-The diff is provided below between the diff tags.
+The diff needs to be reviewed for any potential issues.
+
+The diff is provided below between the xml diff tags as shown below. 
 
 <diff>
 {diff}
@@ -82,6 +84,9 @@ have to fill each bullet point. If you do not have enough information to fill a 
 
 Start each section with a heading markdown format. Section 1 is the "Code Changes" section and Section 2 is the 
 "Potential Issues" section.
+
+Do not make any information up, use the information provided in the diff and only respond to facts about that diff.
+Do not think it is ok to use other project information to fill in the blanks.
 
 The Code Changes summary should include the following:
 - What is being changed and try to infer why
@@ -96,9 +101,8 @@ The Potential Issues summary should include the following:
 - Any new function should include a docstring or typehints. If not, call it out.
 - Ensure that all code changes are properly formatted and indented.
 
-If everything looks good in the "Potential Issues" section, omit it completely and do not comment anything that indicate
- that it looks good. Never say "looks good" or "good to go", or anything similar to that. Keep it all factual and
- only comment on issues.
+If everything looks good do not comment on it looking good, only report on the changes. 
+Never say "looks good" or "good to go", or anything similar to that. Keep it all factual and only comment on issues.
 
 If there are less than 10 bullet points, that is okay. If there are more than 10 bullet points, please summarize the 
 most important points. Post this message in markdown formatting. At the start of the response, please include source
@@ -108,16 +112,16 @@ branch and target branch of the PR in the following format:
 
 Be sure to include the arrow between the source and target branches and make this a Heading2 in markdown.
 
-At the bottom of your response, be sure to indicate this is an auto-generated comment using the exact phrase below, 
-without quotes and ensure it is italicised. Do not say anything like "Here is the response in the requested format:".
+Do not say anything like "Here is the response in the requested format:".
 Speak as if you are providing the information on a pull request.
 
 Put in a haiku about software development and pretend it is quoted from a historical figure. 
 
+At the bottom of your response, be sure to indicate this is an auto-generated comment using the exact phrase below, 
+without quotes and ensure it is italicised.
+
 "This is an automated comment from PrBot."
-
-
-Assistant:"""
+"""
 
     prompt = ChatPromptTemplate.from_template(
         template=template,
@@ -136,8 +140,9 @@ Assistant:"""
     )
 
     print("prompt generated successfully")
-    logger.debug("prompt: %s", prompt)
+    logger.info("prompt: %s", str(prompt))
     response = textgen_llm.invoke(str(prompt))
+    logger.info("response: %s", str(response.content))
 
     return response.content
 
