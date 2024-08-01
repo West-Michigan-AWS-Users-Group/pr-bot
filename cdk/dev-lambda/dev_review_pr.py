@@ -98,8 +98,9 @@ The Potential Issues summary should include the following:
 - Review of comments to ensure they align with the code changes. If not, call it out.
 - Ensure that all code changes in Python require a single quote, except for when formatting requires a double quote.
 - Mention any variable names that do not follow snake case and that seem to not have an underscore delimiter.
-- Ensure that all code changes are PEP8 compliant.
-- Any new function should include a docstring or typehints. If not, call it out.
+- Ensure that all code changes are PEP8 compliant if Python.
+- Ensure that all code changes are aligned with ESLint6 if JavaScript.
+- Any new function should include a docstring or typehints (or equivalent) if the language supports it. If not, call it out.
 - Ensure that all code changes are properly formatted and indented.
 
 If everything looks good do not comment on it looking good, only report on the changes. 
