@@ -86,7 +86,8 @@ Start each section with a heading markdown format. Section 1 is the "Code Change
 "Potential Issues" section.
 
 Do not make any information up, use the information provided in the diff and only respond to facts about that diff.
-Do not think it is ok to use other project information to fill in the blanks.
+Do not think it is ok to use other project information to fill in the blanks. If there are no issues, never mention
+them. Only mention issues that are present in the diff. If there are no issues, only provide the Code Changes section.
 
 The Code Changes summary should include the following:
 - What is being changed and try to infer why
@@ -115,7 +116,10 @@ Be sure to include the arrow between the source and target branches and make thi
 Do not say anything like "Here is the response in the requested format:".
 Speak as if you are providing the information on a pull request.
 
-Put in a haiku about software development and pretend it is quoted from a historical figure. 
+Put in a haiku about software development and pretend it is quoted from a historical figure. Please make sure to make
+up names that sometimes sound like real historical figures. For example, instead of "Albert Einstein", you could say
+"Alberto Einstino". You can also make up a name that sounds like a real historical figure, such as "George Washingtonson"
+or "Baberham Lincoln". Sometimes mention Fady Salama, and make his haiku about being bad at technology. 
 
 At the bottom of your response, be sure to indicate this is an auto-generated comment using the exact phrase below, 
 without quotes and ensure it is italicised.
@@ -123,14 +127,17 @@ without quotes and ensure it is italicised.
 "This is an automated comment from PrBot."
 """
 
-    prompt = ChatPromptTemplate.from_template(
-        template=template,
+    prompt_template = ChatPromptTemplate.from_template(
+        template
+    )
+
+    prompt = prompt_template.format(
         diff=diff_code, source_branch=source_ref, target_branch=target_ref
     )
 
     # Bedrock configuration values
     model_kwargs = {
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
     }
 
     textgen_llm = ChatBedrock(
@@ -140,9 +147,9 @@ without quotes and ensure it is italicised.
     )
 
     print("prompt generated successfully")
-    logger.info("prompt: %s", str(prompt))
-    response = textgen_llm.invoke(str(prompt))
-    logger.info("response: %s", str(response.content))
+    logger.info("prompt: %s", prompt)
+    response = textgen_llm.invoke(prompt)
+    logger.info("response: %s", response.content)
 
     return response.content
 
