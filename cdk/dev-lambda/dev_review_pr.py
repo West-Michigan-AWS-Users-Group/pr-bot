@@ -66,21 +66,6 @@ def prompt_bedrock(diff_code: str, source_ref: str, target_ref: str) -> str:
     target_ref: str: The target branch of the pull request.
     """
 
-    # Bedrock configuration values
-    inference_modifier = {
-        "max_tokens_to_sample": 4096,
-        "temperature": 0.5,
-        "top_k": 250,
-        "top_p": 1,
-        "stop_sequences": ["\n\nHuman"],
-    }
-
-    textgen_llm = ChatBedrock(
-        model_id="anthropic.claude-3-opus-20240229-v1:0",
-        client=get_bedrock_client(),
-        model_kwargs=inference_modifier,
-    )
-
     template = """
 Human: You are being provided a diff of code changes in a PR. The diff needs to be reviewed for any potential issues.
 
@@ -118,13 +103,16 @@ If everything looks good in the "Potential Issues" section, omit it completely a
 If there are less than 10 bullet points, that is okay. If there are more than 10 bullet points, please summarize the 
 most important points. Post this message in markdown formatting. At the start of the response, please include source
 branch and target branch of the PR in the following format:
- 
+
 "## `{source_branch}` --> `{target_branch}` "
 
 Be sure to include the arrow between the source and target branches and make this a Heading2 in markdown.
 
 At the bottom of your response, be sure to indicate this is an auto-generated comment using the exact phrase below, 
-without quotes and ensure it is italicised.
+without quotes and ensure it is italicised. Do not say anything like "Here is the response in the requested format:".
+Speak as if you are providing the information on a pull request.
+
+Put in a haiku about software development and pretend it is quoted from a historical figure. 
 
 "This is an automated comment from PrBot."
 
@@ -135,9 +123,21 @@ Assistant:"""
         template=template,
         diff=diff_code, source_branch=source_ref, target_branch=target_ref
     )
-    logger.info("prompt generated successfully")
+
+    # Bedrock configuration values
+    model_kwargs = {
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+    textgen_llm = ChatBedrock(
+        model_id="anthropic.claude-3-opus-20240229-v1:0",
+        client=get_bedrock_client(),
+        model_kwargs=model_kwargs,
+    )
+
+    print("prompt generated successfully")
     logger.debug("prompt: %s", prompt)
-    response = textgen_llm.invoke(messages=[prompt], input=prompt)
+    response = textgen_llm.invoke(str(prompt))
 
     return response.content
 
